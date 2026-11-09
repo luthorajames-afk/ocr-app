@@ -1,4 +1,4 @@
-"""Fenêtre principale AOCRI (phase 5) — fidèle au mockup validé.
+"""Fenêtre principale AOCRI (phase 6) — fidèle au mockup validé.
 
 La fenêtre ne fait aucun OCR : elle affiche les résultats produits par les
 workers en sous-processus et pilote pause / reprise / annulation (R2).
@@ -6,6 +6,9 @@ Phase 5 : édition avant copie (R9) — l'``EditSession`` porte le document
 courant, l'annulation (Ctrl+Z) / le rétablissement (Ctrl+Y) et le lien
 bidirectionnel bloc ↔ texte ; l'aperçu et les trois onglets se rafraîchissent
 depuis le modèle édité.
+Phase 6 : copie riche (texte + HTML ``<table>`` + Markdown, sans ancres
+d'édition) avec « Copier la page affichée » / « Copier tout le document », et
+export réel DOCX / XLSX / PDF via une boîte de dialogue format + chemin (R14).
 """
 
 from __future__ import annotations
@@ -14,7 +17,14 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import QMimeData, QPoint, QStandardPaths, Qt, QUrl
+from PySide6.QtCore import (
+    QCoreApplication,
+    QEventLoop,
+    QPoint,
+    QStandardPaths,
+    Qt,
+    QUrl,
+)
 from PySide6.QtGui import (
     QDesktopServices,
     QGuiApplication,
@@ -31,41 +41,31 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ocr_app.core.data_model import Page
+from ocr_app.core.clipboard import document_payload, page_payload
+from ocr_app.core.data_model import Document, Page
 from ocr_app.core.exports import Exporter
 from ocr_app.core.task_queue import Task, TaskStatus
 from ocr_app.ui import file_utils
+from ocr_app.ui.clipboard_qt import put_on_clipboard
 from ocr_app.ui.demo_data import DEMO_FILES
 from ocr_app.ui.edit_session import (
     EditSession,
     block_identity,
     load_pages_from_dir,
 )
+from ocr_app.ui.export_dialog import ask_export_path
 from ocr_app.ui.icons import app_icon
 from ocr_app.ui.modules_info import demo_modules, detect_modules
 from ocr_app.ui.task_format import mode_label
 from ocr_app.ui.task_runner import TaskRunner
 from ocr_app.ui.widgets.file_sidebar import FileSidebar
 from ocr_app.ui.widgets.preview import PreviewPanel
-from ocr_app.ui.widgets.results_panel import (
-    ResultsPanel,
-    page_to_html_document,
-    page_to_text,
-)
+from ocr_app.ui.widgets.results_panel import ResultsPanel
 from ocr_app.ui.widgets.status_bar import BottomBar
 from ocr_app.ui.widgets.titlebar import TitleBar
 from ocr_app.ui.widgets.toolbar import AppToolbar
 
 WINDOW_TITLE = "AOCRI — Advanced Optical Character Recognition for Itamba"
-
-EXPORT_FORMATS = (
-    ("txt", "Texte brut (*.txt)", ".txt", "save_plain_text"),
-    ("md", "Markdown (*.md)", ".md", "save_markdown"),
-    ("html", "HTML (*.html)", ".html", "save_html"),
-    ("docx", "Word (*.docx)", ".docx", "save_docx"),
-    ("xlsx", "Excel (*.xlsx)", ".xlsx", "save_xlsx"),
-    ("pdf", "PDF (*.pdf)", ".pdf", "save_pdf"),
-)
 
 
 class MainWindow(QMainWindow):
@@ -151,8 +151,8 @@ class MainWindow(QMainWindow):
         self._bottom.pause_clicked.connect(self._toggle_pause)
         self._bottom.cancel_clicked.connect(self._cancel_current)
         self._bottom.reset_clicked.connect(self._reset_edits)
-        self._bottom.copy_clicked.connect(self._copy_page)
-        self._bottom.export_clicked.connect(self._show_export_menu)
+        self._bottom.copy_clicked.connect(self._show_copy_menu)
+        self._bottom.export_clicked.connect(self._export_document)
 
         self._runner.task_changed.connect(self._on_task_changed)
         self._runner.page_loaded.connect(self._on_page_loaded)
@@ -449,67 +449,62 @@ class MainWindow(QMainWindow):
             return None
         return self._runner.latest_page(self._selected_id)
 
-    def _copy_page(self) -> None:
-        page = self._selected_page()
-        if page is None:
-            self._bottom.show_toast("Aucune page à copier.", error=True)
-            return
-        clipboard = QGuiApplication.clipboard()
-        if QGuiApplication.platformName() == "offscreen":
-            # Le presse-papiers offscreen de Qt plante à la destruction si un
-            # QMimeData lui est confié ; on reste en texte brut en mode headless.
-            clipboard.setText(page_to_text(page))
-            copied_as = "texte"
-        else:
-            mime = QMimeData()
-            mime.setHtml(page_to_html_document(page))
-            mime.setText(page_to_text(page))
-            clipboard.setMimeData(mime)
-            copied_as = "texte + HTML"
-        self._bottom.show_toast(
-            f"Page {page.number} copiée ({copied_as})."
-        )
+    def _current_document(self) -> Optional[Document]:
+        """Document courant avec ses éditions (les Page sont partagées, R9)."""
+        document = self._edit_session.document
+        if document is not None and document.pages:
+            return document
+        if self._selected_id is None:
+            return None
+        return self._runner.document_for(self._selected_id)
 
-    def _build_export_menu(self) -> QMenu:
+    def _show_copy_menu(self) -> None:
+        """Bouton « Copier » : page affichée ou document complet."""
         menu = QMenu(self)
-        for key, label, _suffix, _method in EXPORT_FORMATS:
-            action = menu.addAction(label)
-            action.triggered.connect(
-                lambda _checked=False, fmt=key: self._export_task(fmt)
-            )
-        return menu
-
-    def _show_export_menu(self) -> None:
-        task = (
-            self._runner.task(self._selected_id) if self._selected_id else None
-        )
-        if task is None or self._runner.latest_page(task.id) is None:
-            self._bottom.show_toast("Aucune page à exporter.", error=True)
-            return
-
-        menu = self._build_export_menu()
-        button = self._bottom.export_button
+        menu.addAction("Copier la page affichée", self._copy_page)
+        menu.addAction("Copier tout le document", self._copy_document)
+        button = self._bottom.copy_button
         anchor = button.mapToGlobal(QPoint(0, -menu.sizeHint().height()))
         menu.exec(anchor)
         # Un menu parenté à la fenêtre s'accumule à chaque ouverture : libéré
         # après la fermeture (exec est bloquant, deleteLater est donc sûr ici).
         menu.deleteLater()
 
-    def _export_task(self, fmt: str) -> None:
-        if self._selected_id is None:
+    def _copy_page(self) -> None:
+        """Copie la page affichée : texte brut + HTML (tableaux) + Markdown."""
+        page = self._selected_page()
+        if page is None:
+            self._bottom.show_toast("Aucune page à copier.", error=True)
             return
-        task = self._runner.task(self._selected_id)
-        document = self._runner.document_for(self._selected_id)
-        if task is None or document is None or not document.pages:
+        copied_as = put_on_clipboard(page_payload(page))
+        self._bottom.show_toast(f"Page {page.number} copiée ({copied_as}).")
+
+    def _copy_document(self) -> None:
+        """Copie tout le document courant (une section par page)."""
+        document = self._current_document()
+        if document is None or not document.pages:
+            self._bottom.show_toast("Aucun document à copier.", error=True)
+            return
+        copied_as = put_on_clipboard(document_payload(document))
+        self._bottom.show_toast(
+            f"Document copié — {len(document.pages)} page(s) ({copied_as})."
+        )
+
+    def _export_document(self) -> None:
+        """Bouton « Exporter » : format + chemin (R14), exécution rapide dans
+        le thread GUI (curseur d'attente), erreur signalée, retour dans la
+        barre de statut."""
+        document = self._current_document()
+        if document is None or not document.pages:
             self._bottom.show_toast("Aucune page à exporter.", error=True)
             return
 
-        spec = next((item for item in EXPORT_FORMATS if item[0] == fmt), None)
-        if spec is None:
-            return
-        _key, label, suffix, method_name = spec
-
-        source = Path(task.source_path) if task.source_path else Path("document")
+        task = (
+            self._runner.task(self._selected_id) if self._selected_id else None
+        )
+        source = (
+            Path(task.source_path) if task and task.source_path else Path("document")
+        )
         directory = (
             source.parent
             if source.parent.is_dir()
@@ -520,31 +515,41 @@ class MainWindow(QMainWindow):
                 or Path.home()
             )
         )
-        default_path = directory / f"{source.stem or 'resultat_ocr'}{suffix}"
 
-        selected, _ = QFileDialog.getSaveFileName(
+        choice = ask_export_path(
             self,
-            f"Exporter — {label}",
-            str(default_path),
-            label,
+            default_dir=directory,
+            default_stem=source.stem or "resultat_ocr",
         )
-        if not selected:
+        if choice is None:
             return
-        output = Path(selected)
-        if output.suffix.lower() != suffix:
-            output = output.with_suffix(suffix)
+        fmt, output = choice
 
+        # Retour visuel immédiat : l'écriture d'un gros document DOCX peut
+        # prendre une à deux secondes (curseur d'attente + message, sans
+        # traiter les clics — un processEvents complet permettrait de
+        # relancer l'export pendant l'export, en réentrance).
+        self._bottom.show_toast(f"Export {fmt.label} en cours…", timeout=15000)
+        failure: Optional[str] = None
+        QGuiApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
+            QCoreApplication.processEvents(
+                QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+            )
             exporter = Exporter(document)
-            getattr(exporter, method_name)(str(output))
+            getattr(exporter, fmt.method)(str(output))
         except Exception as exc:  # dépendances optionnelles ou disque
+            failure = str(exc)
+        finally:
+            QGuiApplication.restoreOverrideCursor()
+
+        if failure is not None:
             QMessageBox.warning(
                 self,
                 "Export impossible",
-                f"Le format {label} n'a pas pu être généré.\n\n{exc}",
+                f"L'export {fmt.label} a échoué.\n\n{failure}",
             )
             return
-
         self._bottom.show_toast(f"Exporté : {output.name}", timeout=5000)
 
     # --- Réglages ---------------------------------------------------------

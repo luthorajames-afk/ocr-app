@@ -124,6 +124,10 @@ class BottomBar(QWidget):
         self._copy = self._make_text_button(
             "copy", "Copier", "StatusButton", progress_box
         )
+        self._copy.setToolTip(
+            "Copier la page affichée ou tout le document "
+            "(texte, HTML et Markdown)"
+        )
         self._export = self._make_text_button(
             "download", "Exporter", "StatusPrimary", progress_box, white_icon=True
         )
@@ -142,6 +146,10 @@ class BottomBar(QWidget):
 
         self.set_task(None)
         self.set_content_available(False)
+
+    @property
+    def copy_button(self) -> QPushButton:
+        return self._copy
 
     @property
     def export_button(self) -> QPushButton:

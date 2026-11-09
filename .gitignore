@@ -1,2 +1,5 @@
 .zcode/
 ocr_app/_final_*.png
+
+# Harnais de revue hors depot
+.phase6_review_harness/
