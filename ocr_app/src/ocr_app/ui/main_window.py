@@ -1,4 +1,4 @@
-"""Fenêtre principale AOCRI (phase 6) — fidèle au mockup validé.
+"""Fenêtre principale AOCRI (phase 8 — finitions v1.0).
 
 La fenêtre ne fait aucun OCR : elle affiche les résultats produits par les
 workers en sous-processus et pilote pause / reprise / annulation (R2).
@@ -9,13 +9,18 @@ depuis le modèle édité.
 Phase 6 : copie riche (texte + HTML ``<table>`` + Markdown, sans ancres
 d'édition) avec « Copier la page affichée » / « Copier tout le document », et
 export réel DOCX / XLSX / PDF via une boîte de dialogue format + chemin (R14).
+Phase 8 : traitement par lots (« Ajouter un dossier », compteur global
+« Lot : X/N terminés », boutons « Tout traiter » / « Tout annuler »), relance
+d'une page dans un autre mode (menu contextuel de l'aperçu → tâche ciblée
+``--page``) et réglages OCR persistants (langues + DPI) ouverts depuis la
+barre d'outils.
 """
 
 from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from PySide6.QtCore import (
     QCoreApplication,
@@ -32,6 +37,7 @@ from PySide6.QtGui import (
     QShortcut,
 )
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QMainWindow,
     QMenu,
@@ -46,6 +52,12 @@ from ocr_app.core.data_model import Document, Page
 from ocr_app.core.exports import Exporter
 from ocr_app.core.task_queue import Task, TaskStatus
 from ocr_app.ui import file_utils
+from ocr_app.ui.app_settings import (
+    AppSettings,
+    load_settings,
+    save_settings,
+    settings_summary,
+)
 from ocr_app.ui.clipboard_qt import put_on_clipboard
 from ocr_app.ui.demo_data import DEMO_FILES
 from ocr_app.ui.edit_session import (
@@ -56,6 +68,7 @@ from ocr_app.ui.edit_session import (
 from ocr_app.ui.export_dialog import ask_export_path
 from ocr_app.ui.icons import app_icon
 from ocr_app.ui.modules_info import demo_modules, detect_modules
+from ocr_app.ui.settings_dialog import SettingsDialog
 from ocr_app.ui.task_format import mode_label
 from ocr_app.ui.task_runner import TaskRunner
 from ocr_app.ui.worker_commands import resolve_worker_commands
@@ -67,6 +80,13 @@ from ocr_app.ui.widgets.titlebar import TitleBar
 from ocr_app.ui.widgets.toolbar import AppToolbar
 
 WINDOW_TITLE = "AOCRI — Advanced Optical Character Recognition for Itamba"
+VERSION_LABEL = "v1.0"
+
+
+def _full_window_title(dirty: bool = False) -> str:
+    """Titre avec branding de version (« v1.0 ») et marque de modification."""
+    marker = "● " if dirty else ""
+    return f"{marker}{WINDOW_TITLE} — {VERSION_LABEL}"
 
 
 class MainWindow(QMainWindow):
@@ -79,7 +99,7 @@ class MainWindow(QMainWindow):
         demo: bool = False,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(WINDOW_TITLE)
+        self.setWindowTitle(_full_window_title())
         self.setWindowIcon(app_icon())
         self.resize(1280, 860)
         self.setMinimumSize(1000, 700)
@@ -88,18 +108,27 @@ class MainWindow(QMainWindow):
         self._selected_id: Optional[str] = None
         self._demo_active = False
 
+        # Phase 8 : réglages OCR persistants (langues, DPI), chargés avant la
+        # création des tâches pour que chaque worker reçoive --lang / --dpi.
+        self._settings: AppSettings = load_settings()
+
         # Phase 7 : workers réels par mode (worker_main) quand le module du
         # mode est installé ; message clair « module non installé » sinon.
         commands, unavailable_modes = resolve_worker_commands()
+        self._unavailable_modes = dict(unavailable_modes)
         self._runner = TaskRunner(
             self,
             worker_commands=commands,
             unavailable_modes=unavailable_modes,
         )
+        self._runner.set_worker_settings(
+            self._settings.languages, self._settings.dpi
+        )
         self._edit_session = EditSession(self)
         self._build_ui()
         self._connect_signals()
 
+        self._toolbar.set_settings_indicator(settings_summary(self._settings))
         self._sidebar.set_modules(detect_modules())
         self._reset_view()
         if demo:
@@ -143,11 +172,19 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self) -> None:
         self._toolbar.add_files_requested.connect(self._choose_files)
-        self._toolbar.settings_requested.connect(self._show_settings_menu)
+        self._toolbar.add_folder_requested.connect(self._choose_folder)
+        self._toolbar.settings_requested.connect(self._open_settings)
         self._toolbar.mode_changed.connect(self._on_mode_changed)
 
         self._sidebar.file_selected.connect(self._on_file_selected)
         self._preview.block_selected.connect(self._on_block_selected)
+        # Phase 8 : menu contextuel de l'aperçu → « Relancer cette page en… ».
+        self._preview.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self._preview.customContextMenuRequested.connect(
+            self._show_relaunch_menu
+        )
         self._results.block_clicked.connect(self._on_results_block_clicked)
         self._results.block_text_committed.connect(
             self._on_block_text_committed
@@ -161,12 +198,15 @@ class MainWindow(QMainWindow):
         self._bottom.reset_clicked.connect(self._reset_edits)
         self._bottom.copy_clicked.connect(self._show_copy_menu)
         self._bottom.export_clicked.connect(self._export_document)
+        self._bottom.process_all_clicked.connect(self._process_all_pending)
+        self._bottom.cancel_all_clicked.connect(self._cancel_all)
 
         self._runner.task_changed.connect(self._on_task_changed)
         self._runner.page_loaded.connect(self._on_page_loaded)
         self._runner.task_started.connect(self._on_task_started)
         self._runner.error_occurred.connect(self._on_error)
         self._runner.notice.connect(self._on_notice)
+        self._runner.batch_progress.connect(self._on_batch_progress)
 
         # Session d'édition : le modèle est la source de vérité, les vues se
         # rafraîchissent à chaque documentChanged (édition, undo, redo).
@@ -213,6 +253,90 @@ class MainWindow(QMainWindow):
         if paths:
             self.add_paths(paths)
 
+    def _choose_folder(self) -> None:
+        """Phase 8 : « Ajouter un dossier » → tous les PDF/JPG/PNG en lot.
+
+        Le parcours récursif est optionnel (case à cocher) ; les fichiers sont
+        ajoutés dans l'ordre alphabétique et traités séquentiellement par la
+        file, avec compteur global dans la barre de statut.
+        """
+        documents = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.DocumentsLocation
+        )
+        start = documents if documents and Path(documents).is_dir() else str(
+            Path.home()
+        )
+        directory = QFileDialog.getExistingDirectory(
+            self, "Ajouter un dossier", start
+        )
+        if not directory:
+            return
+
+        question = QMessageBox(self)
+        question.setWindowTitle("Traitement par lots")
+        question.setIcon(QMessageBox.Icon.Question)
+        question.setText(
+            "Ajouter tous les PDF, JPG et PNG de ce dossier au lot de "
+            f"traitement ?\n\n{directory}"
+        )
+        recursive_box = QCheckBox("Inclure les sous-dossiers", question)
+        question.setCheckBox(recursive_box)
+        question.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        question.button(QMessageBox.StandardButton.Yes).setText("Ajouter")
+        question.button(QMessageBox.StandardButton.No).setText("Annuler")
+        if question.exec() != QMessageBox.StandardButton.Yes:
+            return
+
+        paths, skipped = self._collect_folder_documents(
+            directory, recursive=recursive_box.isChecked()
+        )
+        if not paths:
+            self._bottom.show_toast(
+                "Aucun fichier pris en charge (PDF, JPG, PNG) dans ce dossier.",
+                error=True,
+            )
+            return
+        added = self.add_paths([str(path) for path in paths])
+        # Phase 8 : les fichiers non pris en charge du dossier ne bloquent pas
+        # le reste du lot, mais ils sont signalés clairement (jamais ignorés
+        # en silence) — le lot continue sur les fichiers valides.
+        if added and skipped:
+            self._bottom.show_toast(
+                f"{skipped} fichier(s) ignoré(s) : format non pris en charge "
+                "(PDF, JPG, PNG attendus).",
+                error=True,
+                timeout=6000,
+            )
+
+    @staticmethod
+    def _collect_folder_documents(
+        directory: str, recursive: bool
+    ) -> Tuple[List[Path], int]:
+        """Documents pris en charge d'un dossier, tri alphabétique (R14).
+
+        Retourne ``(documents retenus, nombre de fichiers ignorés)`` : un
+        fichier non pris en charge (extension autre que PDF/JPG/PNG) n'entre
+        pas dans le lot mais est compté pour être signalé à l'utilisateur.
+        """
+        base = Path(directory)
+        pattern = "**/*" if recursive else "*"
+        try:
+            files = [path for path in sorted(base.glob(pattern)) if path.is_file()]
+        except OSError:
+            return [], 0
+        candidates = [
+            path
+            for path in files
+            if file_utils.is_supported_input(str(path))
+        ]
+        # Tri alphabétique insensible à la casse (a.pdf, B.jpg, c.png…).
+        return (
+            sorted(candidates, key=lambda path: path.name.lower()),
+            len(files) - len(candidates),
+        )
+
     def add_paths(self, paths: List[str]) -> int:
         """Ajoute des fichiers et démarre leur traitement (API utilisable hors dialog)."""
         valid = [
@@ -229,20 +353,30 @@ class MainWindow(QMainWindow):
         if self._demo_active:
             self._exit_demo()
 
+        # Phase 8 : lot de N fichiers → compteur global « Lot : X/N terminés ».
+        batch = len(valid) >= 2
+        task_ids: List[str] = []
         first_id: Optional[str] = None
         for path in valid:
             total = file_utils.probe_page_count(path)
             task = self._runner.create_task(path, self._mode, total)
             self._sidebar.add_task(task)
-            self._runner.enqueue(task.id)
+            task_ids.append(task.id)
             if first_id is None:
                 first_id = task.id
 
+        if batch:
+            self._runner.begin_batch(task_ids)
+        for task_id in task_ids:
+            self._runner.enqueue(task_id)
+
         if first_id is not None:
             self._select_task(first_id)
-        self._bottom.show_toast(
-            f"{len(valid)} fichier(s) ajouté(s) — traitement lancé."
-        )
+        self._refresh_pending_button()
+        message = f"{len(valid)} fichier(s) ajouté(s) — traitement lancé."
+        if batch:
+            message += " Lot : 0/" + str(len(valid)) + " terminés."
+        self._bottom.show_toast(message)
         return len(valid)
 
     # --- Démonstration ----------------------------------------------------
@@ -280,6 +414,7 @@ class MainWindow(QMainWindow):
 
         if first_id is not None:
             self._select_task(first_id)
+        self._refresh_pending_button()
 
     def _exit_demo(self) -> None:
         if not self._demo_active and self._sidebar.row_count() == 0:
@@ -288,7 +423,9 @@ class MainWindow(QMainWindow):
         self._sidebar.clear()
         self._sidebar.set_modules(detect_modules())
         self._demo_active = False
+        self._bottom.set_batch_progress(None)
         self._reset_view()
+        self._refresh_pending_button()
 
     # --- Sélection --------------------------------------------------------
     def _select_task(self, task_id: str) -> None:
@@ -314,6 +451,7 @@ class MainWindow(QMainWindow):
         page = self._runner.latest_page(task_id)
 
         self._preview.set_title_info(name, info)
+        self._bottom.set_task(task, title_override=self._relaunch_title(task))
         if page is not None:
             self._preview.show_page(page)
             self._results.set_page(page)
@@ -337,27 +475,45 @@ class MainWindow(QMainWindow):
             self._results.clear(message)
             self._bottom.set_content_available(False)
 
-        self._bottom.set_task(task)
         self._refresh_edit_status()
 
-    @staticmethod
-    def _task_info(task: Task) -> str:
+    def _relaunch_title(self, task: Optional[Task]) -> Optional[str]:
+        """Titre distinct d'une tâche de relance : « Relance page 3 »."""
+        if task is None:
+            return None
+        relaunch = self._runner.relaunch_page(task.id)
+        if relaunch is None:
+            return None
+        return f"Relance page {relaunch}"
+
+    def _task_info(self, task: Optional[Task]) -> str:
+        """Info d'en-tête de l'aperçu : relance, pages, DPI des réglages."""
+        dpi_suffix = f"{self._settings.effective_dpi()} DPI"
+        if task is None:
+            return dpi_suffix
+        relaunch = self._runner.relaunch_page(task.id)
+        if relaunch is not None:
+            return (
+                f"Relance page {relaunch} · {mode_label(task.mode)} · "
+                f"{dpi_suffix}"
+            )
         total = task.total_pages
         if total <= 0:
-            return "300 DPI"
+            return dpi_suffix
         if task.status == TaskStatus.PENDING:
-            return f"{total} pages · 300 DPI"
+            return f"{total} pages · {dpi_suffix}"
         if task.current_page > 0:
-            return f"Page {task.current_page} / {total} · 300 DPI"
-        return f"{total} pages · 300 DPI"
+            return f"Page {task.current_page} / {total} · {dpi_suffix}"
+        return f"{total} pages · {dpi_suffix}"
 
     # --- Signaux tâches ---------------------------------------------------
     def _on_task_changed(self, task: Task) -> None:
         self._sidebar.update_task(task)
+        self._refresh_pending_button()
         if task.id != self._selected_id:
             return
 
-        self._bottom.set_task(task)
+        self._bottom.set_task(task, title_override=self._relaunch_title(task))
         self._preview.set_info(self._task_info(task))
         page = self._runner.latest_page(task.id)
         self._bottom.set_content_available(page is not None)
@@ -393,13 +549,15 @@ class MainWindow(QMainWindow):
         task = self._runner.task(task_id)
         self._preview.set_title_info(
             Path(task.source_path).name if task and task.source_path else "",
-            self._task_info(task) if task else "300 DPI",
+            self._task_info(task),
         )
         self._preview.show_page(page)
         self._results.set_page(page)
         self._bottom.set_content_available(True)
         if task is not None:
-            self._bottom.set_task(task)
+            self._bottom.set_task(
+                task, title_override=self._relaunch_title(task)
+            )
         # La page fraîchement traitée rejoint la session d'édition courante :
         # les éditions des autres pages restent annulables.
         if self._edit_session.task_id == task_id and (
@@ -417,10 +575,135 @@ class MainWindow(QMainWindow):
         if task_id == self._selected_id:
             task = self._runner.task(task_id)
             if task is not None:
-                self._bottom.set_task(task)
+                # title_override : une relance en erreur affiche « Relance
+                # page N — erreur », pas « Page 1 / 1 — erreur ».
+                self._bottom.set_task(
+                    task, title_override=self._relaunch_title(task)
+                )
 
     def _on_notice(self, message: str) -> None:
         self._bottom.show_toast(message)
+
+    # --- Lot et file d'attente (phase 8) ----------------------------------
+    def _on_batch_progress(self, done: int, total: int) -> None:
+        """Compteur global du lot dans la barre de statut."""
+        self._bottom.set_batch_progress((done, total))
+        if 0 < total <= done:
+            self._bottom.show_toast(
+                f"Lot terminé : {done}/{total} fichier(s) traité(s)."
+            )
+
+    def _process_all_pending(self) -> None:
+        """Bouton « Tout traiter » : (re)lance toutes les tâches en attente."""
+        if self._demo_active:
+            self._bottom.show_toast(
+                "Mode démonstration : aucun worker actif.", error=True
+            )
+            return
+        queued = self._runner.enqueue_all_pending()
+        if queued:
+            self._bottom.show_toast(f"{queued} tâche(s) remise(s) en file.")
+
+    def _cancel_all(self) -> None:
+        """Bouton « Tout annuler » : seule action qui arrête un lot entier.
+
+        Le bouton « Annuler » d'une tâche n'arrête PAS le lot (les suivantes
+        démarrent normalement) ; celui-ci annule la tâche en cours et vide la
+        file d'attente (les tâches restent visibles, marquées « annulé »).
+        """
+        if self._demo_active:
+            self._bottom.show_toast(
+                "Mode démonstration : aucun worker actif.", error=True
+            )
+            return
+        cancelled = self._runner.cancel_all()
+        if not cancelled:
+            self._bottom.show_toast("Aucune tâche à annuler.", error=True)
+
+    def _refresh_pending_button(self) -> None:
+        """« Tout traiter » visible seulement si des tâches attendent."""
+        if self._demo_active:
+            self._bottom.set_pending_count(0)
+            return
+        self._bottom.set_pending_count(self._runner.pending_count())
+
+    # --- Relance d'une page dans un autre mode (phase 8) -------------------
+    def _show_relaunch_menu(self, pos) -> None:
+        """Menu contextuel de l'aperçu : « Relancer cette page en… ».
+
+        Désactivé pendant un traitement en cours sur le même document, et
+        pour les modes dont le module n'est pas installé (message clair).
+        """
+        task = (
+            self._runner.task(self._selected_id) if self._selected_id else None
+        )
+        page = self._selected_page()
+        if task is None or page is None:
+            return
+        source = Path(task.source_path) if task.source_path else None
+        if source is None or not source.is_file():
+            return
+        page_number = page.number
+
+        busy = self._runner.is_document_busy(task.source_path)
+        menu = QMenu(self)
+        submenu = menu.addMenu(f"Relancer la page {page_number} en…")
+        # Les raisons de désactivation (module non installé, traitement en
+        # cours) sont portées par les tooltips : sans cette ligne, Qt ne les
+        # affiche pas dans un menu et l'action grisée reste inexpliquée.
+        submenu.setToolTipsVisible(True)
+        for mode in ("simple", "medium", "advanced"):
+            action = submenu.addAction(mode_label(mode))
+            unavailable = self._unavailable_modes.get(mode)
+            if busy:
+                action.setEnabled(False)
+                action.setToolTip(
+                    "Un traitement est déjà en cours sur ce document."
+                )
+            elif unavailable:
+                action.setEnabled(False)
+                action.setToolTip(unavailable)
+            else:
+                action.triggered.connect(
+                    lambda checked=False, chosen=mode, number=page_number: (
+                        self._relaunch_page(chosen, number)
+                    )
+                )
+        menu.exec(self._preview.mapToGlobal(pos))
+        menu.deleteLater()  # même raison que les menus copie/export
+
+    def _relaunch_page(self, mode: str, page_number: int) -> None:
+        """Crée une tâche ciblée (mode choisi, --input + --page) et l'enfile.
+
+        La relance ne bloque jamais l'interface : elle passe par la file
+        ``TaskRunner`` (sous-processus, R2) et démarre quand le worker est
+        libre. Le résultat est écrit dans le dossier de travail de la nouvelle
+        tâche — le JSON de la page d'origine n'est jamais écrasé ; en cas
+        d'échec du mode, le résultat d'origine reste affiché (erreur signalée
+        dans la barre de statut).
+        """
+        task = (
+            self._runner.task(self._selected_id) if self._selected_id else None
+        )
+        if task is None or not task.source_path:
+            return
+        if self._runner.is_document_busy(task.source_path):
+            self._bottom.show_toast(
+                "Un traitement est déjà en cours sur ce document.", error=True
+            )
+            return
+
+        relaunch = self._runner.create_page_task(
+            task.source_path, mode, page_number
+        )
+        self._sidebar.add_task(relaunch)
+        self._runner.enqueue(relaunch.id)
+        self._select_task(relaunch.id)
+        self._refresh_pending_button()
+        self._bottom.show_toast(
+            f"Relance de la page {page_number} en {mode_label(mode)}…",
+            timeout=5000,
+        )
 
     # --- Commandes --------------------------------------------------------
     def _toggle_pause(self) -> None:
@@ -561,24 +844,53 @@ class MainWindow(QMainWindow):
         self._bottom.show_toast(f"Exporté : {output.name}", timeout=5000)
 
     # --- Réglages ---------------------------------------------------------
-    def _build_settings_menu(self) -> QMenu:
-        menu = QMenu(self)
-        menu.addAction("Dossier de travail", self._open_work_dir)
-        menu.addAction("Modules OCR…", self._show_modules)
-        if self._sidebar.row_count() == 0 and not self._demo_active:
-            menu.addAction(
-                "Charger l'aperçu de démonstration", self.load_demo
+    def _open_settings(self) -> None:
+        """Bouton réglages de la toolbar : dialogue langues + DPI (phase 8).
+
+        Les réglages validés sont persistés (``%LOCALAPPDATA%\\AOCRI\\
+        settings.json``, UTF-8) puis appliqués : indicateur de la toolbar
+        rafraîchi et ``--lang`` / ``--dpi`` passés aux prochains workers.
+        """
+        dialog = SettingsDialog(
+            self._settings,
+            self,
+            show_demo_entry=(
+                self._sidebar.row_count() == 0 and not self._demo_active
+            ),
+        )
+        dialog.work_dir_requested.connect(self._open_work_dir)
+        # Les QMessageBox ouverts depuis le dialogue modal sont parentés à
+        # LUI : parentés à la fenêtre principale, ils risquent de s'empiler
+        # SOUS le dialogue modal (fenêtre figée en apparence).
+        dialog.modules_requested.connect(lambda: self._show_modules(dialog))
+        dialog.about_requested.connect(lambda: self._show_about(dialog))
+
+        def _start_demo() -> None:
+            dialog.reject()
+            self.load_demo()
+
+        dialog.demo_requested.connect(_start_demo)
+        if not dialog.exec():
+            dialog.deleteLater()
+            return
+        self._settings = dialog.result_settings()
+        try:
+            save_settings(self._settings)
+        except OSError as exc:
+            self._bottom.show_toast(
+                f"Réglages non enregistrés : {exc}", error=True, timeout=7000
             )
-        menu.addSeparator()
-        menu.addAction("À propos d'AOCRI", self._show_about)
-        return menu
+        self._apply_settings()
+        dialog.deleteLater()
 
-    def _show_settings_menu(self) -> None:
-        from PySide6.QtGui import QCursor
-
-        menu = self._build_settings_menu()
-        menu.exec(QCursor.pos())
-        menu.deleteLater()  # même raison que le menu d'export
+    def _apply_settings(self) -> None:
+        """Réglages → workers (--lang/--dpi), indicateur toolbar, toast."""
+        self._runner.set_worker_settings(
+            self._settings.languages, self._settings.dpi
+        )
+        summary = settings_summary(self._settings)
+        self._toolbar.set_settings_indicator(summary)
+        self._bottom.show_toast(f"Réglages appliqués : {summary}.")
 
     def _open_work_dir(self) -> None:
         try:
@@ -590,13 +902,13 @@ class MainWindow(QMainWindow):
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
-    def _show_modules(self) -> None:
+    def _show_modules(self, parent: Optional[QWidget] = None) -> None:
         lines = []
         for module in detect_modules():
             state = "installé" if module.installed else "non installé"
             lines.append(f"- {module.label} : {state}")
         QMessageBox.information(
-            self,
+            parent or self,
             "Modules OCR",
             "Modules détectés sur cette machine :\n\n"
             + "\n".join(lines)
@@ -604,16 +916,16 @@ class MainWindow(QMainWindow):
             "double-clic sur un bloc de texte dans Rendu ou Texte brut.",
         )
 
-    def _show_about(self) -> None:
+    def _show_about(self, parent: Optional[QWidget] = None) -> None:
         from ocr_app import __version__
 
         QMessageBox.about(
-            self,
+            parent or self,
             "À propos d'AOCRI",
             "<b>AOCRI</b> — Advanced Optical Character Recognition for "
             "Itamba<br><br>"
             "Kriesty Solutions · application hors ligne<br>"
-            f"Version {__version__}",
+            f"Version {__version__} · {VERSION_LABEL}",
         )
 
     # --- Divers -----------------------------------------------------------
@@ -704,9 +1016,9 @@ class MainWindow(QMainWindow):
         )
 
     def _refresh_edit_status(self) -> None:
-        """Titre (« ● modifié ») + statistiques de la barre inférieure."""
+        """Titre (« ● modifié » · v1.0) + statistiques de la barre inférieure."""
         dirty = self._edit_session.is_dirty()
-        title = f"● {WINDOW_TITLE}" if dirty else WINDOW_TITLE
+        title = _full_window_title(dirty=dirty)
         if self.windowTitle() != title:
             self.setWindowTitle(title)
         task = (

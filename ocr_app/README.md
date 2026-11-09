@@ -8,6 +8,15 @@ OCR avancé avec conservation de la mise en page — documents PDF, JPG, PNG.
 
 Application de bureau Windows, installable et entièrement hors ligne. Elle applique un OCR avancé à des documents PDF, JPG et PNG et restitue un résultat copiable qui conserve la mise en page, les tableaux et tous les éléments de texte d'origine.
 
+## Fonctionnalités v1.0
+
+- Trois modes de traitement (Simple, Moyen, Avancé) exécutés en sous-processus
+- Traitement par lots : « Ajouter un dossier » (récursif optionnel), compteur global « Lot : X/N terminés », « Tout traiter » / « Tout annuler »
+- Relance d'une page dans un autre mode (menu contextuel de l'aperçu), sans jamais écraser le résultat d'origine
+- Réglages OCR persistants (langues fra/eng, DPI 150/200/300) dans `%LOCALAPPDATA%\AOCRI\settings.json`
+- Édition avant copie (annuler/rétablir), copie riche et exports DOCX/XLSX/PDF/HTML/MD/TXT
+- Recette d'acceptation automatisée : `python scripts/acceptance.py`
+
 ## Architecture (squelette v1)
 
 - Interface PySide6 (Qt) — ne fait aucun calcul d'OCR, pilote les processus de travail
@@ -39,8 +48,9 @@ cd ocr_app
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e ".[dev]"
-python -m pytest            # tests smoke
+python -m pytest            # suite de tests (181 tests)
 python -m ocr_app.cli --help # ligne de commande
+python scripts/acceptance.py # recette d'acceptation v1.0
 ```
 
 ## Plan de travail (8 phases)

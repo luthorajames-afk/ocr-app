@@ -1,7 +1,9 @@
 """Worker principal par mode : protocole JSON stdin/stdout avec OCR réel.
 
 Phase 7 — point d'entrée unique des workers (aussi utilisé par PyInstaller,
-scripts/build.py, R3). La boucle commune réutilise le style de
+scripts/build.py, R3). Phase 8 : ``--page N`` (relance d'une seule page,
+même protocole, numéro réel) et ``--lang`` (langues Tesseract du mode
+Simple, réglages de l'interface). La boucle commune réutilise le style de
 ``fake_worker.py`` (démarrage sur commande ``start``, pause/reprise,
 annulation, progression par étape, sauvegarde page par page R6) mais
 délègue le traitement de chaque page au pipeline réel par mode :
@@ -16,10 +18,16 @@ Exécution (R2 : toujours en sous-processus) :
 
     python -m ocr_app.workers.worker_main --mode simple --pages N --work-dir ./_work
     python -m ocr_app.workers.worker_main --mode simple --input doc.pdf --work-dir ./_work
+    python -m ocr_app.workers.worker_main --mode simple --input doc.pdf --page 3 --work-dir ./_work
+    python -m ocr_app.workers.worker_main --mode simple --input doc.pdf --lang fra+eng --dpi 200 --work-dir ./_work
 
 Sans ``--input``, N pages sont simulées (protocole identique, pages
 placeholder). Avec ``--input`` (PDF, JPG, PNG), le document réel est traité
-page par page à 300 DPI maximum (R7).
+page par page à 300 DPI maximum (R7). Avec ``--page N`` (phase 8), une seule
+page du document est traitée — même protocole, ``page_done`` avec le numéro
+réel de la page (relance ciblée depuis l'interface). ``--lang`` (phase 8)
+sélectionne les langues Tesseract du mode Simple (``fra+eng``, ``fra``,
+``eng``…).
 
 Commandes lues sur stdin, une ligne JSON par commande :
 
@@ -41,6 +49,7 @@ que les chemins accentués (R14) et les messages français restent lisibles.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import threading
 import traceback
@@ -83,6 +92,11 @@ MODES = ("simple", "medium", "advanced")
 
 # Confiance indicative des pages placeholder (aucun OCR réel effectué).
 _PLACEHOLDER_CONFIDENCE = {"simple": 0.97, "medium": 0.90, "advanced": 0.98}
+
+# Codes de langue Tesseract acceptés par --lang : lettres/underscores séparés
+# par « + » (fra+eng, fra, eng, chi_sim…). La disponibilité réelle des données
+# est vérifiée par le moteur (repli contrôlé, cf. core/ocr_engine.py).
+_LANG_RE = re.compile(r"^[A-Za-z_]{2,32}(\+[A-Za-z_]{2,32})*$")
 
 
 class _Cancelled(Exception):
@@ -172,6 +186,8 @@ class WorkerMain:
         stage_delay: float = 0.05,
         dpi: int = 300,
         models_dir: Optional[str] = None,
+        page: Optional[int] = None,
+        language: Optional[str] = None,
     ) -> None:
         self.mode = str(mode).strip().lower()
         if self.mode not in MODES:
@@ -184,6 +200,31 @@ class WorkerMain:
         self.stage_delay = max(0.0, float(stage_delay))
         self.dpi = int(dpi) if int(dpi) > 0 else 300
         self.models_dir = models_dir
+
+        # Phase 8 : relance d'une seule page (--page N) et langues Tesseract
+        # (--lang fra+eng). Page invalide ou langue mal formée : erreur d'usage
+        # propre (ValueError → code 2, comme un mode inconnu).
+        if page is None:
+            self.single_page: Optional[int] = None
+        else:
+            try:
+                requested = int(page)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError(f"--page invalide : {page!r}") from None
+            if requested < 1:
+                raise ValueError("--page doit être un entier >= 1")
+            self.single_page = requested
+
+        if language is None:
+            self.language: Optional[str] = None
+        else:
+            wanted = str(language).strip().lower()
+            if not wanted or not _LANG_RE.match(wanted):
+                raise ValueError(
+                    f"--lang invalide : {language!r} "
+                    "(attendu : codes séparés par « + », ex. fra+eng)"
+                )
+            self.language = wanted
 
         self._out = _ProtocolOutput()
 
@@ -216,7 +257,9 @@ class WorkerMain:
         _log(
             f"prêt : mode {self.mode}, "
             f"{'document ' + str(self.input_path) if self.input_path else f'{self.total_pages} page(s) simulée(s)'}, "
-            f"dossier de travail {self.work_dir}"
+            + (f"page {self.single_page} seule, " if self.single_page else "")
+            + (f"langues {self.language}, " if self.language else "")
+            + f"dossier de travail {self.work_dir}"
         )
         self._reader.start()
 
@@ -344,22 +387,8 @@ class WorkerMain:
         finally:
             renderer.close()
 
-    def _process_document(self, first_page: int) -> None:
-        """Traite le document réel via le pipeline du mode (R6, R7, R8).
-
-        La pause/reprise et l'annulation sont vérifiées à chaque étape du
-        pipeline via le callback ``on_stage``. Le pipeline tourne dans un
-        thread d'assistance daemon : une annulation (ou un EOF) en pleine
-        étape OCR — qui peut durer plusieurs secondes par page — est vue par
-        la boucle principale en moins de ``POLL_INTERVAL`` et abandonne le
-        traitement immédiatement (cancel < 2 s garanti côté worker, R2).
-        """
-        assert self.input_path is not None
-        total = self._count_document_pages()
-        if first_page > max(1, total):
-            _log(f"page de départ {first_page} hors document ({total} page(s))")
-            return
-
+    def _build_pipeline(self, displayed_total: int) -> Pipeline:
+        """Pipeline du mode courant + callback d'étapes + langues (--lang)."""
         pipeline = Pipeline(
             PipelineConfig(
                 mode=self.mode,
@@ -368,17 +397,52 @@ class WorkerMain:
                 models_dir=self.models_dir,
             )
         )
-        pipeline.on_stage(self._make_stage_callback(pipeline, total))
+        self._inject_language(pipeline)
+        pipeline.on_stage(self._make_stage_callback(pipeline, displayed_total))
+        return pipeline
 
-        # La pipeline ouvre le worker du mode une fois pour tout le document
-        # (R5) et sauvegarde chaque page dès qu'elle est terminée (R6) dans
-        # work_dir/page_NNN.json.
+    def _inject_language(self, pipeline: Pipeline) -> None:
+        """Applique ``--lang`` au moteur Tesseract du mode Simple.
+
+        Phase 8 : les réglages de l'interface arrivent jusqu'au moteur. Le
+        worker Simple accepte un moteur injecté : on le construit avec les
+        langues demandées et on le place comme worker du pipeline (R2 inchangé :
+        tout ceci tourne dans le sous-processus du worker). Les modes
+        medium/advanced n'ont pas encore de moteur réel : ``--lang`` y est
+        accepté et journalisé, sans autre effet.
+        """
+        if not self.language or self.mode != "simple":
+            return
+        from ocr_app.core.ocr_engine import create_engine
+        from ocr_app.workers.simple import SimpleWorker
+
+        engine = create_engine(
+            "tesseract", tessdata_dir=self.models_dir, language=self.language
+        )
+        # Point d'injection du Pipeline : ``_ensure_worker`` réutilise un
+        # worker déjà présent au lieu d'en construire un ; ``close()`` le
+        # libère comme n'importe quel worker créé par le pipeline lui-même.
+        pipeline._worker = SimpleWorker(  # noqa: SLF001 - injection volontaire
+            models_dir=self.models_dir, engine=engine
+        )
+        _log(f"langues OCR demandées : {self.language}")
+
+    def _run_pipeline_monitored(self, pipeline: Pipeline, runner) -> None:
+        """Exécute ``runner(pipeline)`` dans un thread daemon surveillé.
+
+        La pause/reprise et l'annulation sont vérifiées à chaque étape du
+        pipeline via le callback ``on_stage``. Le pipeline tourne dans un
+        thread d'assistance daemon : une annulation (ou un EOF) en pleine
+        étape OCR — qui peut durer plusieurs secondes par page — est vue par
+        la boucle principale en moins de ``POLL_INTERVAL`` et abandonne le
+        traitement immédiatement (cancel < 2 s garanti côté worker, R2).
+        """
         error: list[BaseException] = []
         done = threading.Event()
 
         def run_pipeline() -> None:
             try:
-                pipeline.process_document(self.input_path or "")
+                runner(pipeline)
             except BaseException as exc:  # remonté au thread principal
                 error.append(exc)
             finally:
@@ -401,6 +465,50 @@ class WorkerMain:
                 raise error[0]
         finally:
             pipeline.close()
+
+    def _process_document(self, first_page: int) -> None:
+        """Traite le document réel via le pipeline du mode (R6, R7, R8).
+
+        Phase 8 : avec ``--page N``, une seule page est traitée (même
+        protocole, ``page_done`` avec le numéro réel de la page).
+        """
+        assert self.input_path is not None
+        total = self._count_document_pages()
+        if self.single_page is not None:
+            self._process_single_page(self.single_page, total)
+            return
+        if first_page > max(1, total):
+            _log(f"page de départ {first_page} hors document ({total} page(s))")
+            return
+
+        # La pipeline ouvre le worker du mode une fois pour tout le document
+        # (R5) et sauvegarde chaque page dès qu'elle est terminée (R6) dans
+        # work_dir/page_NNN.json.
+        pipeline = self._build_pipeline(total)
+        self._run_pipeline_monitored(
+            pipeline,
+            lambda pl: pl.process_document(self.input_path or ""),
+        )
+
+    def _process_single_page(self, page_number: int, total: int) -> None:
+        """Traite UNE seule page du document (``--page N``, phase 8).
+
+        Même protocole que le document complet : progression par étape avec
+        ``total = 1`` (une page demandée), puis un unique ``page_done`` portant
+        le numéro réel de la page et le chemin ``page_NNN.json`` écrit dans le
+        dossier de travail de la tâche (jamais celui du document d'origine).
+        """
+        assert self.input_path is not None
+        if page_number < 1 or page_number > max(1, total):
+            message = f"page {page_number} hors document ({total} page(s))"
+            _log(message)
+            raise PipelineError(message)
+
+        pipeline = self._build_pipeline(displayed_total=1)
+        self._run_pipeline_monitored(
+            pipeline,
+            lambda pl: pl.process_page(self.input_path or "", page_number),
+        )
 
     def _make_stage_callback(self, pipeline: Pipeline, total: int):
         def on_stage(page_number: int, stage: str) -> None:
@@ -426,12 +534,21 @@ class WorkerMain:
 
     # --- Simulation (sans --input) ---------------------------------------
     def _process_simulated(self, first_page: int) -> None:
-        """Simule ``--pages N`` pages placeholder avec le protocole complet."""
-        total = self.total_pages
-        if first_page > total:
-            _log(f"page de départ {first_page} hors borne ({total} page(s))")
-            return
-        for page_number in range(first_page, total + 1):
+        """Simule ``--pages N`` pages placeholder avec le protocole complet.
+
+        Phase 8 : avec ``--page N``, une seule page simulée est produite (même
+        convention que le document réel : total affiché = 1, numéro réel).
+        """
+        if self.single_page is not None:
+            pages: range = range(self.single_page, self.single_page + 1)
+            total = 1
+        else:
+            total = self.total_pages
+            if first_page > total:
+                _log(f"page de départ {first_page} hors borne ({total} page(s))")
+                return
+            pages = range(first_page, total + 1)
+        for page_number in pages:
             self._current_page = page_number
             for stage in PIPELINE_STAGES:
                 self._checkpoint()
@@ -566,6 +683,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="dossier tessdata explicite (R4 ; défaut : models/tessdata du projet)",
     )
+    parser.add_argument(
+        "--page",
+        type=int,
+        default=None,
+        help=(
+            "traite UNE seule page du document (numéro réel, 1-based) ; "
+            "sans --input, simule cette page seule (phase 8)"
+        ),
+    )
+    parser.add_argument(
+        "--lang",
+        default=None,
+        help=(
+            "langues Tesseract du mode Simple, séparées par « + » "
+            "(ex. fra+eng ; défaut : fra+eng)"
+        ),
+    )
     return parser
 
 
@@ -581,6 +715,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             stage_delay=args.stage_delay,
             dpi=args.dpi,
             models_dir=args.models_dir,
+            page=args.page,
+            language=args.lang,
         )
     except ValueError as exc:
         _log(str(exc))

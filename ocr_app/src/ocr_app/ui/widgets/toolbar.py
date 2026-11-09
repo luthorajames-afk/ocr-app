@@ -82,6 +82,7 @@ class AppToolbar(QWidget):
     """Barre d'outils principale de l'application."""
 
     add_files_requested = Signal()
+    add_folder_requested = Signal()
     settings_requested = Signal()
     mode_changed = Signal(str)
 
@@ -93,7 +94,7 @@ class AppToolbar(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 9, 14, 9)
-        layout.setSpacing(14)
+        layout.setSpacing(10)
 
         self.mode_selector = ModeSelector(self)
         self.mode_selector.mode_changed.connect(self.mode_changed)
@@ -108,6 +109,18 @@ class AppToolbar(QWidget):
         add_button.clicked.connect(self.add_files_requested)
         layout.addWidget(add_button, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        # Phase 8 : traitement par lots — tous les PDF/JPG/PNG d'un dossier.
+        add_folder_button = QPushButton("Ajouter un dossier", self)
+        add_folder_button.setObjectName("ToolButton")
+        add_folder_button.setIcon(make_icon("folder", theme.TEXT, 16))
+        add_folder_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_folder_button.setToolTip(
+            "Ajouter tous les PDF, JPG et PNG d'un dossier (lot séquentiel)"
+        )
+        add_folder_button.setAccessibleName("Ajouter un dossier")
+        add_folder_button.clicked.connect(self.add_folder_requested)
+        layout.addWidget(add_folder_button, 0, Qt.AlignmentFlag.AlignVCenter)
+
         layout.addStretch(1)
 
         language = QWidget(self)
@@ -118,16 +131,16 @@ class AppToolbar(QWidget):
         globe.setPixmap(make_icon("globe", theme.MUTED, 14).pixmap(14, 14))
         globe.setFixedSize(14, 14)
         language_layout.addWidget(globe)
-        language_text = QLabel("FR + EN · 300 DPI", language)
-        language_text.setObjectName("LangLabel")
-        language_layout.addWidget(language_text)
+        self._language_text = QLabel("FR + EN · 300 DPI", language)
+        self._language_text.setObjectName("LangLabel")
+        language_layout.addWidget(self._language_text)
         layout.addWidget(language, 0, Qt.AlignmentFlag.AlignVCenter)
 
         settings_button = QPushButton(self)
         settings_button.setObjectName("IconButton")
         settings_button.setIcon(make_icon("settings", theme.MUTED, 17))
         settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        settings_button.setToolTip("Réglages")
+        settings_button.setToolTip("Réglages OCR (langues, DPI)")
         settings_button.setAccessibleName("Réglages")
         settings_button.clicked.connect(self.settings_requested)
         layout.addWidget(settings_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -141,3 +154,9 @@ class AppToolbar(QWidget):
 
     def set_mode(self, mode: str) -> None:
         self.mode_selector.set_mode(mode)
+
+    def set_settings_indicator(self, text: str) -> None:
+        """Indicateur dynamique « FR + EN · 300 DPI » (réglages, phase 8)."""
+        cleaned = (text or "").strip()
+        if cleaned:
+            self._language_text.setText(cleaned)

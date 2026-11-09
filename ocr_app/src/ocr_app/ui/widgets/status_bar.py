@@ -45,6 +45,8 @@ class BottomBar(QWidget):
     reset_clicked = Signal()
     copy_clicked = Signal()
     export_clicked = Signal()
+    process_all_clicked = Signal()  # phase 8 : « Tout traiter »
+    cancel_all_clicked = Signal()  # phase 8 : « Tout annuler » (lot entier)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -74,6 +76,12 @@ class BottomBar(QWidget):
         self._progress_text.setText("Aucun document")
         label_row.addWidget(self._progress_text)
         label_row.addStretch(1)
+        # Phase 8 : compteur global du lot (« Lot : 2/5 terminés »).
+        self._batch_label = QLabel("", progress_box)
+        self._batch_label.setObjectName("ProgressText")
+        self._batch_label.setTextFormat(Qt.TextFormat.RichText)
+        self._batch_label.hide()
+        label_row.addWidget(self._batch_label)
         self._edit_stats = QLabel("", progress_box)
         self._edit_stats.setObjectName("ProgressText")
         self._edit_stats.setTextFormat(Qt.TextFormat.RichText)
@@ -131,21 +139,46 @@ class BottomBar(QWidget):
         self._export = self._make_text_button(
             "download", "Exporter", "StatusPrimary", progress_box, white_icon=True
         )
+        # Phase 8 : relance des tâches restées en attente (ex. après une
+        # annulation ou un worker occupé), visible seulement si nécessaire.
+        self._process_all = self._make_text_button(
+            "play", "Tout traiter", "StatusButton", progress_box
+        )
+        self._process_all.setToolTip(
+            "Lancer (ou relancer) toutes les tâches en attente de la file"
+        )
+        self._process_all.setAccessibleName("Tout traiter")
+        # Phase 8 : contrepartie explicite de « Tout traiter » — annuler la
+        # tâche en cours ET vider la file (annuler une seule tâche, bouton
+        # « Annuler », laisse le lot continuer).
+        self._cancel_all = self._make_text_button(
+            "close", "Tout annuler", "StatusButton", progress_box
+        )
+        self._cancel_all.setToolTip(
+            "Annuler la tâche en cours et toutes les tâches en attente"
+        )
+        self._cancel_all.setAccessibleName("Tout annuler")
 
         self._pause.clicked.connect(self.pause_clicked)
         self._cancel.clicked.connect(self.cancel_clicked)
         self._reset.clicked.connect(self.reset_clicked)
         self._copy.clicked.connect(self.copy_clicked)
         self._export.clicked.connect(self.export_clicked)
+        self._process_all.clicked.connect(self.process_all_clicked)
+        self._cancel_all.clicked.connect(self.cancel_all_clicked)
 
         layout.addWidget(self._pause)
         layout.addWidget(self._cancel)
         layout.addWidget(self._reset)
         layout.addWidget(self._copy)
         layout.addWidget(self._export)
+        layout.addWidget(self._process_all)
+        layout.addWidget(self._cancel_all)
 
         self.set_task(None)
         self.set_content_available(False)
+        self.set_batch_progress(None)
+        self.set_pending_count(0)
 
     @property
     def copy_button(self) -> QPushButton:
@@ -186,7 +219,9 @@ class BottomBar(QWidget):
         return button
 
     # --- Mise à jour ------------------------------------------------------
-    def set_task(self, task: Optional[Task]) -> None:
+    def set_task(
+        self, task: Optional[Task], *, title_override: Optional[str] = None
+    ) -> None:
         if task is None:
             self._progress_text.setText("Aucun document")
             self._percent.setText("—")
@@ -202,8 +237,14 @@ class BottomBar(QWidget):
         self._bar.setValue(percent)
         self._percent.setText(f"{percent} %")
 
-        page_part = ""
-        if task.current_page > 0 and task.total_pages > 0:
+        if title_override:
+            # Relance de page (phase 8) : « Relance page 3 » au lieu de
+            # « Page 3 / 1 » qui n'aurait pas de sens pour une tâche ciblée.
+            page_part = (
+                f'<span style="color:#1a1d24; font-weight:600;">'
+                f"{title_override}</span>"
+            )
+        elif task.current_page > 0 and task.total_pages > 0:
             page_part = (
                 f'<span style="color:#1a1d24; font-weight:600;">'
                 f"Page {task.current_page} / {task.total_pages}</span>"
@@ -213,6 +254,8 @@ class BottomBar(QWidget):
                 f'<span style="color:#1a1d24; font-weight:600;">'
                 f"{task.total_pages} pages</span>"
             )
+        else:
+            page_part = ""
 
         if task.status == TaskStatus.DONE:
             detail = "terminé"
@@ -256,6 +299,38 @@ class BottomBar(QWidget):
         self._copy.setIcon(make_icon("copy", copy_color, 15))
         self._export.setIcon(make_icon("download", export_color, 15))
         self._reset.setIcon(make_icon("reset", reset_color, 15))
+
+    # --- Lot et file d'attente (phase 8) ----------------------------------
+    def set_batch_progress(self, progress: Optional[tuple]) -> None:
+        """Compteur global du lot : « Lot : 2/5 terminés » (sinon masqué).
+
+        ``progress`` est un couple ``(terminées, total)`` ou ``None``.
+        """
+        if progress is None:
+            self._batch_label.setText("")
+            self._batch_label.hide()
+            return
+        done, total = progress
+        done = max(0, int(done))
+        total = max(0, int(total))
+        if total < 2:
+            self._batch_label.setText("")
+            self._batch_label.hide()
+            return
+        self._batch_label.setText(
+            f'<span style="color:#68707d;">Lot : <b>{done}/{total}</b> '
+            "terminés</span>"
+        )
+        self._batch_label.show()
+
+    def set_pending_count(self, count: int) -> None:
+        """Boutons « Tout traiter » / « Tout annuler » : visibles seulement si
+        des tâches attendent."""
+        pending = int(count) > 0
+        self._process_all.setEnabled(pending)
+        self._process_all.setVisible(pending)
+        self._cancel_all.setEnabled(pending)
+        self._cancel_all.setVisible(pending)
 
     def set_edit_stats(
         self,

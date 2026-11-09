@@ -16,6 +16,7 @@ from PySide6.QtCore import QCoreApplication, QObject, QTimer, Signal
 from ocr_app.core.data_model import Document, Page
 from ocr_app.core.task_queue import Task, TaskQueue, TaskStatus
 from ocr_app.ui import file_utils
+from ocr_app.ui.app_settings import AVAILABLE_LANGUAGES
 from ocr_app.ui.worker_client import WorkerClient
 from ocr_app.ui.worker_commands import accepts_input_document
 
@@ -30,6 +31,7 @@ class TaskRunner(QObject):
     task_started = Signal(str)               # task_id
     error_occurred = Signal(str, str)        # task_id, message
     notice = Signal(str)                     # message transitoire
+    batch_progress = Signal(int, int)        # phase 8 : (terminées, total)
 
     def __init__(
         self,
@@ -85,6 +87,15 @@ class TaskRunner(QObject):
         self._log_tail: List[str] = []
         self._work_root: Optional[Path] = None
 
+        # Phase 8 : réglages OCR passés aux workers (--lang, --dpi), relances
+        # ciblées d'une page (--page) et compteur global des lots.
+        self._settings_args: tuple[str, ...] = ()
+        self._relaunch_pages: Dict[str, int] = {}
+        self._batch_ids: set = set()
+        self._batch_counted: set = set()
+        self._batch_total = 0
+        self._batch_done = 0
+
         # Filet de sécurité : même si la fenêtre n'est pas fermée par
         # closeEvent (arrêt de Qt, session Windows), aucun worker ne survit.
         app = QCoreApplication.instance()
@@ -137,9 +148,97 @@ class TaskRunner(QObject):
             self._pending.append(task_id)
         self._start_next()
 
+    def enqueue_all_pending(self) -> int:
+        """« Tout traiter » : remet en file toutes les tâches encore en attente.
+
+        Retourne le nombre de tâches (re)mises en file. Les tâches déjà en
+        file ou déjà démarrées sont ignorées (``enqueue`` est idempotent).
+        """
+        queued = 0
+        for task in self._queue.list():
+            if task.status == TaskStatus.PENDING:
+                self.enqueue(task.id)
+                queued += 1
+        return queued
+
+    def pending_count(self) -> int:
+        """Nombre de tâches PENDING dans la file (bouton « Tout traiter »)."""
+        return sum(
+            1 for task in self._queue.list() if task.status == TaskStatus.PENDING
+        )
+
     def register_page(self, task_id: str, page: Page) -> None:
         """Enregistre une page déjà traitée (mode démonstration ou reprise)."""
         self._pages.setdefault(task_id, {})[page.number] = page
+
+    # --- Réglages workers (phase 8) ---------------------------------------
+    def set_worker_settings(self, languages: Sequence[str], dpi: int) -> None:
+        """Réglages OCR à passer aux workers réels : ``--lang fra+eng --dpi N``.
+
+        Stocké sous forme d'arguments prêts à l'emploi ; appliqué seulement
+        aux workers qui les comprennent (worker_main et exécutables packagés —
+        le worker factice de développement n'accepte ni ``--lang`` ni
+        ``--dpi``, cf. ``accepts_input_document``).
+        """
+        wanted = {str(lang).strip().lower() for lang in languages}
+        # Ordre canonique unique (cf. app_settings.clean_languages) : les
+        # langues connues d'abord, dans l'ordre d'affichage, puis toute langue
+        # inconnue en fin (tri alphabétique) plutôt que perdue.
+        ordered = [lang for lang in AVAILABLE_LANGUAGES if lang in wanted]
+        ordered += [
+            lang for lang in sorted(wanted) if lang not in AVAILABLE_LANGUAGES
+        ]
+        dpi_value = max(1, min(int(dpi), 300))
+        args: List[str] = []
+        if ordered:
+            args += ["--lang", "+".join(ordered)]
+        args += ["--dpi", str(dpi_value)]
+        self._settings_args = tuple(args)
+
+    # --- Relance d'une page dans un autre mode (phase 8) -------------------
+    def create_page_task(self, source_path: str, mode: str, page_number: int) -> Task:
+        """Crée une tâche ciblée : UNE seule page d'un document existant.
+
+        Le worker recevra ``--input <source> --page N`` ; le résultat est écrit
+        dans le dossier de travail propre à cette nouvelle tâche (le JSON de la
+        page d'origine n'est jamais écrasé) et rechargé dans l'aperçu à la fin.
+        """
+        task = self.create_task(source_path, mode, 1)
+        self._relaunch_pages[task.id] = max(1, int(page_number))
+        return task
+
+    def relaunch_page(self, task_id: str) -> Optional[int]:
+        """Numéro de page ciblé par une tâche de relance (None sinon)."""
+        return self._relaunch_pages.get(task_id)
+
+    def is_document_busy(self, source_path: str) -> bool:
+        """Vrai si une tâche du même document est en cours ou en pause.
+
+        Utilisé par la fenêtre pour désactiver « Relancer cette page en… »
+        pendant un traitement en cours sur le même document.
+        """
+        normalized = str(source_path)
+        for task in self._queue.list():
+            if task.source_path != normalized:
+                continue
+            if task.status in (TaskStatus.RUNNING, TaskStatus.PAUSED):
+                return True
+        return False
+
+    # --- Lots (phase 8) ----------------------------------------------------
+    def begin_batch(self, task_ids: Sequence[str]) -> None:
+        """Démarre le comptage global d'un lot de tâches créées ensemble.
+
+        Seules les tâches listées sont comptées : une relance de page lancée
+        pendant le lot ne fausse pas le compteur. Chaque tâche qui atteint un
+        état terminal (terminée, annulée, erreur) incrémente « Lot : X/N ».
+        """
+        self._batch_ids = {str(task_id) for task_id in task_ids}
+        self._batch_counted = set()
+        self._batch_total = len(self._batch_ids)
+        self._batch_done = 0
+        if self._batch_total:
+            self.batch_progress.emit(self._batch_done, self._batch_total)
 
     def _root(self) -> Path:
         if self._work_root is None:
@@ -206,13 +305,21 @@ class TaskRunner(QObject):
 
             # worker_main traite le document réel : lui passer --input.
             # (fake_worker, qui n'a pas cette option, reste utilisable tel quel.)
+            # Phase 8 : les mêmes workers comprennent --page (relance ciblée)
+            # et --lang/--dpi (réglages) ; le worker factice, jamais.
+            accepts_real = accepts_input_document(command)
             extra_args: tuple[str, ...] = ()
             if (
-                accepts_input_document(command)
+                accepts_real
                 and task.source_path
                 and Path(task.source_path).is_file()
             ):
                 extra_args = ("--input", task.source_path)
+            relaunch_page = self._relaunch_pages.get(task_id)
+            if accepts_real and relaunch_page is not None:
+                extra_args += ("--page", str(relaunch_page))
+            if accepts_real and self._settings_args:
+                extra_args += self._settings_args
 
             if not self._worker.start(
                 total,
@@ -270,6 +377,29 @@ class TaskRunner(QObject):
         self._queue.cancel(task.id)
         self.notice.emit("Annulation demandée…")
         return True
+
+    def cancel_all(self) -> int:
+        """« Tout annuler » explicite : arrête le lot entier.
+
+        Contrairement à ``cancel_current`` (une tâche annulée n'arrête PAS le
+        lot, les suivantes démarrent normalement), cette action est la seule
+        qui vide la file d'attente : la tâche en cours est annulée et toutes
+        les tâches encore PENDING passent en CANCELLED (elles restent
+        consultables dans le panneau latéral et comptent dans « Lot : X/N »).
+
+        Retourne le nombre de tâches annulées (0 si rien à annuler).
+        """
+        cancelled = 0
+        for task in self._queue.list():
+            if task.status == TaskStatus.PENDING:
+                self._queue.cancel(task.id)
+                cancelled += 1
+        self._pending.clear()
+        if self.cancel_current():
+            cancelled += 1
+        if cancelled:
+            self.notice.emit(f"{cancelled} tâche(s) annulée(s).")
+        return cancelled
 
     def _current_task(self) -> Optional[Task]:
         if self._current_id is None:
@@ -335,10 +465,18 @@ class TaskRunner(QObject):
                 if task.status == TaskStatus.PAUSED
                 else TaskStatus.RUNNING
             )
+            if task.id in self._relaunch_pages:
+                # Relance ciblée : une page attendue, mais le numéro réel de
+                # la page (ex. 3) est conservé pour l'affichage ; pages_done
+                # reste borné au total de la tâche (1) pour que la fin de
+                # worker la passe proprement en DONE.
+                pages_done_value = 1
+            else:
+                pages_done_value = max(task.pages_done, page.number)
             self._queue.update_progress(
                 task.id,
                 status=status,
-                pages_done=max(task.pages_done, page.number),
+                pages_done=pages_done_value,
                 current_page=page.number,
                 stage="",
             )
@@ -459,6 +597,18 @@ class TaskRunner(QObject):
 
     # --- Nettoyage --------------------------------------------------------
     def _emit_task_changed(self, task: Task) -> None:
+        # Phase 8 : compteur global du lot — chaque tâche du lot qui atteint
+        # un état terminal est comptée une seule fois (terminée, annulée ou
+        # en erreur, peu importe le chemin emprunté).
+        if (
+            task.id in self._batch_ids
+            and task.id not in self._batch_counted
+            and task.status
+            in (TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.ERROR)
+        ):
+            self._batch_counted.add(task.id)
+            self._batch_done = min(self._batch_total, self._batch_done + 1)
+            self.batch_progress.emit(self._batch_done, self._batch_total)
         self.task_changed.emit(task)
 
     def clear(self) -> None:
@@ -473,8 +623,16 @@ class TaskRunner(QObject):
             self._worker.stop(grace_ms=500)
         self._pages.clear()
         self._start_error = None
+        self._relaunch_pages.clear()
+        self._reset_batch()
         self._queue = TaskQueue()
         self._queue.set_on_change(self._emit_task_changed)
+
+    def _reset_batch(self) -> None:
+        self._batch_ids = set()
+        self._batch_counted = set()
+        self._batch_total = 0
+        self._batch_done = 0
 
     def shutdown(self) -> None:
         """Arrêt de l'application : aucun worker ne doit survivre.
