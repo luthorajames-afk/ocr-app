@@ -3,6 +3,9 @@
 Exemple :
     python -m ocr_app.cli process --input document.pdf --mode simple --output ./out
     python -m ocr_app process --input document.pdf --mode simple --output ./out
+
+Le mode Simple effectue un OCR réel (Tesseract/tesserocr) ; les modes Moyen et
+Avancé restent des placeholders explicites en phase 1.
 """
 
 from __future__ import annotations
@@ -12,10 +15,11 @@ import sys
 from pathlib import Path
 
 from ocr_app.core.exports import Exporter
-from ocr_app.core.pipeline import Pipeline, PipelineConfig
+from ocr_app.core.pipeline import MAX_DPI, Pipeline, PipelineConfig
+from ocr_app.core.rendering import SUPPORTED_SUFFIXES
 
-# R7 : le rendu PDF est limité à 300 DPI.
-MAX_DPI = 300
+# R7 : le rendu PDF est limité à 300 DPI (constante partagée avec le pipeline).
+_STUB_MODES = ("medium", "advanced")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,21 +43,48 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Résolution de rendu (max {MAX_DPI} DPI)",
     )
 
-    sub.add_parser("info", help="Affiche des informations sur le squelette")
+    sub.add_parser("info", help="Affiche des informations sur les moteurs disponibles")
     return parser
+
+
+def _configure_stdio() -> None:
+    """UTF-8 explicite : chemins accentués et messages lisibles (R14)."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # pragma: no cover - flux non reconfigurable
+            pass
 
 
 def _on_stage(page_number: int, stage: str) -> None:
     print(f"[page {page_number}] {stage}", flush=True)
 
 
-def _run_process(args: argparse.Namespace) -> int:
-    input_path = Path(args.input)
+def _validate_input(input_path: Path) -> bool:
     if not input_path.exists():
         print(f"Erreur : fichier introuvable : {input_path}", file=sys.stderr)
-        return 1
+        return False
     if not input_path.is_file():
-        print(f"Erreur : chemin qui n'est pas un fichier : {input_path}", file=sys.stderr)
+        print(
+            f"Erreur : chemin qui n'est pas un fichier : {input_path}",
+            file=sys.stderr,
+        )
+        return False
+    suffix = input_path.suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        accepted = ", ".join(sorted(SUPPORTED_SUFFIXES))
+        print(
+            f"Erreur : format non supporté : {suffix or '(sans extension)'} "
+            f"(formats acceptés : {accepted})",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _run_process(args: argparse.Namespace) -> int:
+    input_path = Path(args.input)
+    if not _validate_input(input_path):
         return 1
     if args.dpi <= 0:
         print("Erreur : --dpi doit être un entier strictement positif", file=sys.stderr)
@@ -75,19 +106,30 @@ def _run_process(args: argparse.Namespace) -> int:
         print(f"Erreur : dossier de sortie inaccessible : {exc}", file=sys.stderr)
         return 1
 
-    config = PipelineConfig(mode=args.mode, dpi=dpi, work_dir=str(work_dir))
+    if args.mode in _STUB_MODES:
+        print(
+            f"Avertissement : le mode '{args.mode}' n'est pas implémenté en "
+            "phase 1 ; seuls des blocs placeholder sont produits.",
+            file=sys.stderr,
+        )
+
+    config = PipelineConfig(
+        mode=args.mode,
+        dpi=dpi,
+        work_dir=str(work_dir),
+    )
     pipeline = Pipeline(config)
     pipeline.on_stage(_on_stage)
 
     try:
         doc = pipeline.process_document(str(input_path))
-    except Exception as exc:  # noqa: BLE001 - la CLI doit rendre une erreur lisible
+    except Exception as exc:  # noqa: BLE001 - la CLI rend l'erreur lisible
         print(f"Erreur pendant le traitement : {exc}", file=sys.stderr)
         return 1
 
-    # R6 : chaque page terminée est écrite immédiatement en JSON. L'API
-    # `process_document` retourne encore le document complet ; quand elle
-    # exposera un flux page par page, cette sauvegarde ira dans le callback.
+    # R6 : les pages ont déjà été écrites dans work/ au fil du traitement.
+    # Ce second passage produit les fichiers finaux à la racine de sortie,
+    # attendus par l'interface et les exports.
     try:
         for page in doc.pages:
             page.save_json(output_dir / f"page_{page.number:03d}.json")
@@ -105,8 +147,25 @@ def _run_process(args: argparse.Namespace) -> int:
         print(f"Erreur pendant l'export : {exc}", file=sys.stderr)
         return 1
 
+    total_blocks = sum(len(page.blocks) for page in doc.pages)
+    total_chars = sum(
+        len(block.text) for page in doc.pages for block in page.blocks
+    )
+    confidences = [
+        page.confidence for page in doc.pages if page.blocks
+    ]
+    average_confidence = (
+        sum(confidences) / len(confidences) if confidences else 0.0
+    )
+
+    print(
+        f"Pages : {len(doc.pages)} | blocs : {total_blocks} | "
+        f"caractères : {total_chars} | "
+        f"confiance moyenne : {average_confidence * 100:.1f} %"
+    )
     print(f"Terminé : {len(doc.pages)} page(s) traitée(s) en mode {args.mode}.")
     print(f"Sortie : {output_dir}")
+    print("Fichiers : result.md, result.html, result.txt, document.json, page_XXX.json")
     return 0
 
 
@@ -114,11 +173,21 @@ def _run_info() -> int:
     from ocr_app import __version__
 
     print(f"ocr-app version {__version__}")
-    print("Application OCR hors ligne (Windows) - squelette v1")
+    print("Application OCR hors ligne (Windows) - cœur phase 1")
+    try:
+        from ocr_app.core.ocr_engine import available_engines, resolve_tessdata_dir
+
+        directory = resolve_tessdata_dir()
+        languages = sorted(path.stem for path in directory.glob("*.traineddata"))
+        print(f"Moteurs : {', '.join(available_engines())}")
+        print(f"tessdata : {directory} ({', '.join(languages)})")
+    except Exception as exc:  # noqa: BLE001 - diagnostic best effort
+        print(f"tessdata : indisponible ({exc})")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
+    _configure_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
 

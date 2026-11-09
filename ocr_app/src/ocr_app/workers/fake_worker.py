@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import sys
 import threading
+import traceback
 from pathlib import Path
 from typing import Any, Optional
 
@@ -69,15 +70,22 @@ def _log(message: str) -> None:
 
 
 class _ProtocolOutput:
-    """Sérialise les messages du protocole, une ligne JSON par message."""
+    """Sérialise les messages du protocole, une ligne JSON par message.
+
+    Le verrou garantit qu'aucune ligne ne peut être entrelacée si un futur
+    worker émet de la progression depuis un thread auxiliaire (le protocole
+    exige une ligne JSON complète par message).
+    """
 
     def __init__(self) -> None:
         self._stream = sys.stdout
+        self._lock = threading.Lock()
 
     def send(self, message: Any) -> bool:
         try:
-            self._stream.write(message.to_json() + "\n")
-            self._stream.flush()
+            with self._lock:
+                self._stream.write(message.to_json() + "\n")
+                self._stream.flush()
             return True
         except (BrokenPipeError, OSError, ValueError):
             return False
@@ -108,7 +116,6 @@ class FakeWorker:
 
         self._start_page = 1
         self._current_page = 0
-        self._eof = False
 
         self._reader = threading.Thread(
             target=self._read_commands,
@@ -122,7 +129,7 @@ class FakeWorker:
             self.work_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             _log(f"dossier de travail inaccessible : {exc}")
-            self._emit(ErrorMessage(page=0, message=f"dossier de travail inaccessible : {exc}"))
+            self._emit_error(0, f"dossier de travail inaccessible : {exc}")
             return 1
 
         _log(f"prêt : {self.total_pages} page(s), dossier de travail {self.work_dir}")
@@ -133,10 +140,13 @@ class FakeWorker:
             if self._stop.is_set():
                 if self._cancelled.is_set():
                     self._emit_cancelled(self._start_page)
+                else:
+                    _log("fin de stdin avant start : arrêt sans erreur")
                 return 0
 
         if self._stop.is_set():
-            self._emit_cancelled(self._start_page)
+            if self._cancelled.is_set():
+                self._emit_cancelled(self._start_page)
             return 0
 
         with self._state_lock:
@@ -148,6 +158,17 @@ class FakeWorker:
         except _Cancelled:
             self._emit_cancelled(self._current_page)
             return 0
+        except Exception as exc:  # jamais de trace non protocole sur stdout
+            _log(
+                f"erreur interne à la page {self._current_page} : "
+                f"{type(exc).__name__}: {exc}"
+            )
+            traceback.print_exc(file=sys.stderr)
+            self._emit_error(
+                max(1, self._current_page),
+                f"erreur interne : {type(exc).__name__}: {exc}",
+            )
+            return 1
 
         _log(f"terminé : {self.total_pages} page(s)")
         return 0
@@ -174,7 +195,6 @@ class FakeWorker:
             _log(f"lecture de stdin interrompue : {exc}")
         finally:
             # EOF ou fin du lecteur : réveille le traitement pour qu'il s'arrête.
-            self._eof = True
             self._stop.set()
             self._proceed.set()
 
@@ -300,6 +320,15 @@ class FakeWorker:
         _log(f"annulation à la page {page_number}")
         try:
             self._emit(ErrorMessage(page=page_number, message=CANCELLED_MESSAGE))
+        except _Cancelled:
+            pass
+
+    def _emit_error(self, page_number: int, message: str) -> None:
+        """Émet une erreur de protocole sans jamais laisser fuiter de trace."""
+        try:
+            self._emit(
+                ErrorMessage(page=max(0, int(page_number)), message=str(message))
+            )
         except _Cancelled:
             pass
 

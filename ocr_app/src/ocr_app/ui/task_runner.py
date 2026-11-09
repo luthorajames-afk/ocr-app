@@ -7,15 +7,18 @@ puis recharge chaque page sauvegardée par le worker (R6/R14).
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional, Sequence
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QCoreApplication, QObject, QTimer, Signal
 
 from ocr_app.core.data_model import Document, Page
 from ocr_app.core.task_queue import Task, TaskQueue, TaskStatus
 from ocr_app.ui import file_utils
 from ocr_app.ui.worker_client import WorkerClient
+
+logger = logging.getLogger(__name__)
 
 
 class TaskRunner(QObject):
@@ -27,7 +30,18 @@ class TaskRunner(QObject):
     error_occurred = Signal(str, str)        # task_id, message
     notice = Signal(str)                     # message transitoire
 
-    def __init__(self, parent: Optional[QObject] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QObject] = None,
+        *,
+        worker_commands: Optional[Mapping[str, Sequence[str]]] = None,
+    ) -> None:
+        """``worker_commands`` associe un mode (simple/medium/advanced) à la
+        commande du worker réel. Sans entrée, le worker factice de
+        développement (``fake_worker``) est utilisé pour tous les modes : le
+        protocole, la pause et l'annulation restent ainsi testables avant le
+        branchement des moteurs réels.
+        """
         super().__init__(parent)
         self._queue = TaskQueue()
         self._queue.set_on_change(self._emit_task_changed)
@@ -40,6 +54,16 @@ class TaskRunner(QObject):
         self._worker.failed.connect(self._on_worker_failed)
         self._worker.log_line.connect(self._on_log_line)
 
+        self._worker_commands: Dict[str, tuple[str, ...]] = {}
+        for mode, command in (worker_commands or {}).items():
+            if isinstance(command, (str, bytes)):
+                raise TypeError(
+                    "la commande du worker doit être une séquence, pas une chaîne"
+                )
+            parts = tuple(str(part) for part in command)
+            if parts:
+                self._worker_commands[str(mode)] = parts
+
         self._pending: List[str] = []
         self._pages: Dict[str, Dict[int, Page]] = {}
         self._current_id: Optional[str] = None
@@ -48,6 +72,12 @@ class TaskRunner(QObject):
         self._start_error: Optional[str] = None
         self._log_tail: List[str] = []
         self._work_root: Optional[Path] = None
+
+        # Filet de sécurité : même si la fenêtre n'est pas fermée par
+        # closeEvent (arrêt de Qt, session Windows), aucun worker ne survit.
+        app = QCoreApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self.shutdown)
 
     # --- Accès ------------------------------------------------------------
     @property
@@ -144,7 +174,11 @@ class TaskRunner(QObject):
                 total_pages=total,
             )
 
-            if not self._worker.start(total, work_dir):
+            if not self._worker.start(
+                total,
+                work_dir,
+                command=self._worker_commands.get(task.mode),
+            ):
                 message = "un worker est déjà en cours"
                 self._queue.update_progress(
                     task_id, status=TaskStatus.ERROR, error_message=message
@@ -206,10 +240,16 @@ class TaskRunner(QObject):
         task = self._current_task()
         if task is None:
             return
+        # Un message tardif ne doit pas ressusciter une tâche terminée, annulée
+        # ou en erreur (certains workers continuent après une erreur de page).
+        if task.status not in (TaskStatus.RUNNING, TaskStatus.PAUSED):
+            return
         try:
             page = int(payload.get("page", 0))
             total = int(payload.get("total", 0))
         except (TypeError, ValueError):
+            return
+        if page < 1:
             return
         stage = str(payload.get("stage", ""))
         status = TaskStatus.PAUSED if task.status == TaskStatus.PAUSED else TaskStatus.RUNNING
@@ -229,10 +269,17 @@ class TaskRunner(QObject):
             page_number = int(payload.get("page", 0))
         except (TypeError, ValueError):
             return
-        result_path = str(payload.get("result_path", ""))
+        result_path = str(payload.get("result_path", "")).strip()
+        if page_number < 1 or not result_path:
+            logger.debug("page_done invalide ignoré : %r", payload)
+            return
         try:
             page = Page.load_json(result_path)
         except (OSError, ValueError, KeyError, TypeError) as exc:
+            if task.status in (TaskStatus.CANCELLED, TaskStatus.ERROR):
+                # Le worker avait déjà signalé l'échec : ne pas écraser l'état.
+                logger.debug("page %s illisible après erreur : %s", page_number, exc)
+                return
             message = f"résultat illisible pour la page {page_number} : {exc}"
             self._queue.update_progress(
                 task.id, status=TaskStatus.ERROR, error_message=message
@@ -241,14 +288,19 @@ class TaskRunner(QObject):
             return
 
         self._pages.setdefault(task.id, {})[page.number] = page
-        status = TaskStatus.PAUSED if task.status == TaskStatus.PAUSED else TaskStatus.RUNNING
-        self._queue.update_progress(
-            task.id,
-            status=status,
-            pages_done=max(task.pages_done, page.number),
-            current_page=page.number,
-            stage="",
-        )
+        if task.status in (TaskStatus.RUNNING, TaskStatus.PAUSED):
+            status = (
+                TaskStatus.PAUSED
+                if task.status == TaskStatus.PAUSED
+                else TaskStatus.RUNNING
+            )
+            self._queue.update_progress(
+                task.id,
+                status=status,
+                pages_done=max(task.pages_done, page.number),
+                current_page=page.number,
+                stage="",
+            )
         self.page_loaded.emit(task.id, page)
 
     def _on_worker_error(self, payload: dict) -> None:
@@ -256,14 +308,30 @@ class TaskRunner(QObject):
         if task is None:
             return
         message = str(payload.get("message", "")).strip() or "erreur inconnue"
-        if "annul" in message.lower():
-            self._queue.update_progress(task.id, status=TaskStatus.CANCELLED)
+        lower = message.lower()
+        # L'intention d'annulation prime sur le texte du message : un worker
+        # réel peut répondre « stopped » ou « interrupted » au lieu de
+        # « annulé ». Inversement, une erreur pendant l'annulation ne doit pas
+        # transformer la tâche en échec. Le préfixe (et non une sous-chaîne)
+        # évite de classer « impossible de cancel... » comme une annulation.
+        cancelled = (
+            self._cancelling
+            or task.status == TaskStatus.CANCELLED
+            or lower.startswith(("annul", "cancel"))
+        )
+        if cancelled:
+            if task.status != TaskStatus.CANCELLED:
+                self._queue.update_progress(task.id, status=TaskStatus.CANCELLED)
             self.notice.emit("Traitement annulé")
-        else:
-            self._queue.update_progress(
-                task.id, status=TaskStatus.ERROR, error_message=message
-            )
-            self.error_occurred.emit(task.id, message)
+            return
+        if task.status in (TaskStatus.ERROR, TaskStatus.CANCELLED, TaskStatus.DONE):
+            # Conserver la première erreur (ou l'état terminal) : les messages
+            # d'erreur suivants ne doivent pas réécrire le diagnostic.
+            return
+        self._queue.update_progress(
+            task.id, status=TaskStatus.ERROR, error_message=message
+        )
+        self.error_occurred.emit(task.id, message)
 
     def _on_worker_failed(self, message: str) -> None:
         self._start_error = message
@@ -277,6 +345,8 @@ class TaskRunner(QObject):
             if task is not None:
                 total = max(1, task.total_pages)
                 if task.status in (TaskStatus.CANCELLED, TaskStatus.ERROR):
+                    # L'état terminal a déjà été décidé par un message error
+                    # ou par cancel_current() : ne pas le réécrire.
                     pass
                 elif self._cancelling:
                     self._queue.update_progress(
@@ -314,7 +384,11 @@ class TaskRunner(QObject):
 
         self._cancelling = False
         self._start_error = None
-        self._start_next()
+        # Ne pas réutiliser le QProcess à l'intérieur de son propre signal
+        # « finished » : laisser Qt terminer la transition d'état (sinon un
+        # démarrage intermittent échoue sur Windows). Le tour de boucle suivant
+        # démarre le document en attente, s'il y en a un.
+        QTimer.singleShot(0, self._start_next)
 
     def _on_log_line(self, line: str) -> None:
         self._log_tail.append(line)
@@ -352,6 +426,8 @@ class TaskRunner(QObject):
         self._current_id = None
         self._cancelling = False
         if self._worker.is_running:
+            # Bloquant court : l'interface quitte un état (démo, nouvelle
+            # analyse) et aucun worker ne doit continuer en arrière-plan.
             self._worker.request_cancel(grace_ms=500)
             self._worker.stop(grace_ms=500)
         self._pages.clear()
@@ -360,8 +436,16 @@ class TaskRunner(QObject):
         self._queue.set_on_change(self._emit_task_changed)
 
     def shutdown(self) -> None:
-        """Arrêt de l'application : aucun worker ne doit survivre."""
+        """Arrêt de l'application : aucun worker ne doit survivre.
+
+        Idempotent : appelé par ``MainWindow.closeEvent`` et par
+        ``QCoreApplication.aboutToQuit``. Si le worker ne répond pas à la
+        commande ``cancel``, il est terminé puis tué (voir WorkerClient.stop).
+        """
         self._shutting_down = True
         self._pending.clear()
         self._current_id = None
+        self._cancelling = False
+        if self._worker.is_running:
+            logger.debug("arrêt du worker à la fermeture de l'application")
         self._worker.stop()

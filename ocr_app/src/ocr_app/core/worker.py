@@ -19,6 +19,7 @@ import logging
 import subprocess
 import sys
 import threading
+import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
@@ -67,6 +68,9 @@ class BaseWorker(ABC):
         self._stderr_thread: Optional[threading.Thread] = None
         self._stderr_lines: deque[str] = deque(maxlen=_STDERR_MAX_LINES)
         self._lock = threading.RLock()
+        # Sérialise démarrage / arrêt : deux appels concurrents à stop() (UI et
+        # atexit) ne doivent pas fermer deux fois les mêmes pipes.
+        self._lifecycle = threading.RLock()
         self._stopped = threading.Event()
 
     # --- Callbacks -------------------------------------------------------
@@ -114,12 +118,22 @@ class BaseWorker(ABC):
         courant, avec ``-u`` pour un stdout non bufferisé) ou un exécutable
         autonome (worker packagé PyInstaller, R3).
         """
-        with self._lock:
-            if self._proc is not None and self._proc.poll() is None:
+        with self._lifecycle:
+            with self._lock:
+                old = self._proc
+                old_reader = self._reader_thread
+                old_stderr = self._stderr_thread
+            if old is not None and old.poll() is None:
                 raise RuntimeError("un worker est déjà en cours d'exécution")
+            if old is not None:
+                # Redémarrage après fin/crash : libérer les tubes de l'ancien
+                # processus avant de réaffecter _proc.
+                self._close_streams(old)
+                self._join_thread(old_reader, timeout=1.0)
+                self._join_thread(old_stderr, timeout=1.0)
 
             cmd = self._build_command(script, args or [])
-            self._proc = subprocess.Popen(
+            proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -129,23 +143,29 @@ class BaseWorker(ABC):
                 errors="replace",
                 bufsize=1,
             )
-            self._running = True
-            self._stopped.clear()
-            self._stderr_lines.clear()
-
-            self._stderr_thread = threading.Thread(
-                target=self._drain_stderr,
-                name=f"{self.mode}-worker-stderr",
-                daemon=True,
-            )
-            self._stderr_thread.start()
-
-            self._reader_thread = threading.Thread(
+            reader = threading.Thread(
                 target=self._read_loop,
+                args=(proc,),
                 name=f"{self.mode}-worker-stdout",
                 daemon=True,
             )
-            self._reader_thread.start()
+            stderr_thread = threading.Thread(
+                target=self._drain_stderr,
+                args=(proc,),
+                name=f"{self.mode}-worker-stderr",
+                daemon=True,
+            )
+
+            with self._lock:
+                self._proc = proc
+                self._reader_thread = reader
+                self._stderr_thread = stderr_thread
+                self._running = True
+                self._stopped.clear()
+                self._stderr_lines.clear()
+
+            stderr_thread.start()
+            reader.start()
 
     @staticmethod
     def _build_command(script: str, args: list[str]) -> list[str]:
@@ -180,10 +200,12 @@ class BaseWorker(ABC):
         with self._lock:
             proc = self._proc
             reader = self._reader_thread
+            stderr_thread = self._stderr_thread
         if proc is None:
             return None
         code = proc.wait(timeout=timeout)
         self._join_thread(reader, timeout=timeout)
+        self._join_thread(stderr_thread, timeout=timeout)
         return code
 
     def send_command(self, action: str, page: Optional[int] = None) -> bool:
@@ -201,56 +223,104 @@ class BaseWorker(ABC):
                 self._running = False
                 return False
 
-    def stop(self, timeout: float = 3.0) -> Optional[int]:
-        """Arrête le worker sans laisser de processus orphelin.
+    def cancel(self, timeout: float = 1.0) -> Optional[int]:
+        """Annule le document en cours sans laisser le worker tourner.
 
-        Séquence : fermeture de stdin (EOF = arrêt propre), attente, puis
-        ``terminate``, puis ``kill``. Le processus est toujours récupéré
-        (``wait``) et les threads de lecture sont joints.
+        Écrit ``cancel`` sur stdin (le worker peut ainsi émettre son message
+        ``error`` d'annulation et libérer ses ressources), attend ``timeout``
+        puis retombe sur :meth:`stop` (terminate/kill) si nécessaire.
+
+        Contrairement à :meth:`stop`, les messages finaux émis par le worker
+        sont délivrés aux callbacks avant la fermeture des flux.
         """
         with self._lock:
             proc = self._proc
             reader = self._reader_thread
-            stderr_thread = self._stderr_thread
-            self._running = False
-            self._stopped.set()
-
         if proc is None:
+            return None
+        if not self.send_command("cancel"):
+            return self.stop(timeout=timeout)
+        code = self._wait_quietly(proc, max(0.0, float(timeout)))
+        if code is None:
+            # Le worker ignore l'annulation : escalade immédiate.
+            return self.stop(timeout=0.0)
+        # Processus terminé : laisser le thread de lecture consommer les
+        # derniers messages (error d'annulation) avant de fermer les flux.
+        self._join_thread(reader, timeout=1.0)
+        return self.stop(timeout=0.0)
+
+    def stop(self, timeout: float = 3.0) -> Optional[int]:
+        """Arrête le worker sans laisser de processus orphelin.
+
+        Séquence : fermeture de stdin (EOF = arrêt propre), attente, puis
+        ``terminate``, puis ``kill``. ``timeout`` est le budget total accordé
+        au worker pour sortir proprement ; la terminaison forcée ajoute au
+        plus ~1 s. Le processus est toujours récupéré (``wait``) et les threads
+        de lecture sont joints.
+        """
+        with self._lifecycle:
+            with self._lock:
+                proc = self._proc
+                reader = self._reader_thread
+                stderr_thread = self._stderr_thread
+                self._running = False
+                self._stopped.set()
+
+            if proc is None:
+                self._join_thread(reader, timeout=timeout)
+                self._join_thread(stderr_thread, timeout=timeout)
+                return None
+
+            deadline = time.monotonic() + max(0.0, float(timeout))
+
+            # 1) Arrêt propre : EOF sur stdin pour un worker qui lit ses commandes.
+            if proc.stdin is not None:
+                try:
+                    proc.stdin.close()
+                except (OSError, ValueError):
+                    pass
+
+            code = self._wait_quietly(proc, self._remaining(deadline))
+            if code is None:
+                self._signal(proc, "terminate")
+                code = self._wait_quietly(proc, self._remaining(deadline))
+            if code is None:
+                self._signal(proc, "kill")
+                # Après kill, le système doit rendre la main rapidement ;
+                # plafonner évite de bloquer l'interface indéfiniment.
+                code = self._wait_quietly(
+                    proc, max(0.5, min(1.0, self._remaining(deadline)))
+                )
+            if code is None:
+                logger.warning(
+                    "le worker %s (pid %s) ne répond pas après kill",
+                    self.mode,
+                    proc.pid,
+                )
+
             self._join_thread(reader, timeout=timeout)
             self._join_thread(stderr_thread, timeout=timeout)
-            return None
+            self._close_streams(proc)
 
-        # 1) Arrêt propre : EOF sur stdin pour un worker qui lit ses commandes.
-        if proc.stdin is not None:
-            try:
-                proc.stdin.close()
-            except (OSError, ValueError):
-                pass
+            with self._lock:
+                if self._proc is proc:
+                    self._proc = None
+                    self._reader_thread = None
+                    self._stderr_thread = None
+            return code
 
-        code = self._wait_quietly(proc, timeout)
-        if code is None:
-            self._signal(proc, "terminate")
-            code = self._wait_quietly(proc, timeout)
-        if code is None:
-            self._signal(proc, "kill")
-            code = self._wait_quietly(proc, timeout)
-        if code is None:
-            logger.warning(
-                "le worker %s (pid %s) ne répond pas après kill",
-                self.mode,
-                proc.pid,
-            )
+    @staticmethod
+    def _remaining(deadline: float) -> float:
+        return max(0.0, deadline - time.monotonic())
 
-        self._join_thread(reader, timeout=timeout)
-        self._join_thread(stderr_thread, timeout=timeout)
-
-        for stream in (proc.stdout, proc.stderr):
+    @staticmethod
+    def _close_streams(proc: subprocess.Popen[str]) -> None:
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
             if stream is not None:
                 try:
                     stream.close()
                 except (OSError, ValueError):
                     pass
-        return code
 
     @staticmethod
     def _wait_quietly(proc: subprocess.Popen[str], timeout: float) -> Optional[int]:
@@ -274,10 +344,9 @@ class BaseWorker(ABC):
             thread.join(timeout=_THREAD_JOIN_TIMEOUT if timeout is None else timeout)
 
     # --- Lecture des messages ---------------------------------------------
-    def _drain_stderr(self) -> None:
+    def _drain_stderr(self, proc: subprocess.Popen[str]) -> None:
         """Vide stderr en continu : évite le blocage du worker sur un pipe plein."""
-        proc = self._proc
-        if proc is None or proc.stderr is None:
+        if proc.stderr is None:
             return
         try:
             for raw in proc.stderr:
@@ -289,9 +358,8 @@ class BaseWorker(ABC):
         except (OSError, ValueError):
             pass
 
-    def _read_loop(self) -> None:
-        proc = self._proc
-        if proc is None or proc.stdout is None:
+    def _read_loop(self, proc: subprocess.Popen[str]) -> None:
+        if proc.stdout is None:
             return
         try:
             for raw in proc.stdout:
@@ -308,8 +376,10 @@ class BaseWorker(ABC):
         except (OSError, ValueError):
             logger.debug("lecture du protocole interrompue", exc_info=True)
         finally:
+            # Récupérer le code de sortie (pas de zombie POSIX) et ne pas
+            # écraser l'état d'un worker plus récent.
+            proc.poll()
             with self._lock:
-                # Ne pas écraser l'état d'un worker plus récent.
                 if self._proc is proc:
                     self._running = False
 
@@ -323,7 +393,13 @@ class BaseWorker(ABC):
                 page = data.get("page")
                 total = data.get("total")
                 stage = data.get("stage")
-                if not _is_int(page) or not _is_int(total) or not isinstance(stage, str):
+                if (
+                    not _is_int(page)
+                    or not _is_int(total)
+                    or page < 1
+                    or total < 1
+                    or not isinstance(stage, str)
+                ):
                     logger.debug("message progress invalide ignoré : %r", data)
                     return
                 callback(ProgressMessage(page=page, total=total, stage=stage))
@@ -333,7 +409,12 @@ class BaseWorker(ABC):
                     return
                 page = data.get("page")
                 result_path = data.get("result_path")
-                if not _is_int(page) or not isinstance(result_path, str):
+                if (
+                    not _is_int(page)
+                    or page < 1
+                    or not isinstance(result_path, str)
+                    or not result_path
+                ):
                     logger.debug("message page_done invalide ignoré : %r", data)
                     return
                 callback(PageDoneMessage(page=page, result_path=result_path))
@@ -343,7 +424,7 @@ class BaseWorker(ABC):
                     return
                 page = data.get("page", 0)
                 message = data.get("message", "")
-                if not _is_int(page) or not isinstance(message, str):
+                if not _is_int(page) or page < 0 or not isinstance(message, str):
                     logger.debug("message error invalide ignoré : %r", data)
                     return
                 callback(ErrorMessage(page=page, message=message))
@@ -366,9 +447,36 @@ def _is_int(value: Any) -> bool:
 
 
 class WorkerProcess(BaseWorker):
-    """Worker encapsulé dans un processus séparé (R2, R3).
+    """Superviseur générique d'un worker externe (R2, R3).
 
-    Pour le squelette, `run_subprocess` peut être appelé avec un script worker
-    factice ; les workers concrets (simple/medium/advanced) héritent de
-    BaseWorker et implémentent process_page/initialize/shutdown.
+    Ce mode ne réalise aucun OCR dans le processus appelant : il lance le
+    script/exécutable fourni, lit son protocole et l'arrête proprement. Les
+    workers concrets (simple/medium/advanced) héritent de :class:`BaseWorker`
+    et implémentent ``process_page``/``initialize``/``shutdown`` ; ce
+    superviseur sert aux appelants qui veulent seulement piloter un worker
+    déjà packagé.
     """
+
+    def __init__(
+        self,
+        mode: str,
+        script: str,
+        args: Optional[list[str]] = None,
+        models_dir: Optional[str] = None,
+    ) -> None:
+        super().__init__(mode=mode, models_dir=models_dir)
+        self._script = script
+        self._args = list(args or [])
+
+    def initialize(self) -> None:
+        """Démarre le processus worker (une fois par document, R5)."""
+        self.start_subprocess(self._script, self._args)
+
+    def process_page(self, page_input: Any, page_number: int) -> Page:
+        raise RuntimeError(
+            "WorkerProcess délègue le traitement des pages au sous-processus"
+        )
+
+    def shutdown(self) -> None:
+        """Arrête le processus worker sans laisser d'orphelin."""
+        self.stop()
