@@ -339,8 +339,10 @@ class MainWindow(QMainWindow):
 
     def add_paths(self, paths: List[str]) -> int:
         """Ajoute des fichiers et démarre leur traitement (API utilisable hors dialog)."""
+        # Chemins absolus obligatoires : le sous-processus worker tourne avec le
+        # dossier de travail comme répertoire courant (R14 — chemins accentués ok).
         valid = [
-            str(Path(path))
+            str(Path(path).resolve())
             for path in paths
             if Path(path).is_file() and file_utils.is_supported_input(path)
         ]
