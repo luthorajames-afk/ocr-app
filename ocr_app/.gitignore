@@ -26,3 +26,9 @@ Thumbs.db
 
 # Modeles OCR (fournis par l'installeur, non versionnes)
 models/
+
+# Environnements d'evaluation Phase 2
+.venv-eval-*/
+
+# Sorties de travail d'evaluation (rapports seuls versionnes)
+data/eval/work/

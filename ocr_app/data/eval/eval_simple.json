@@ -1,0 +1,510 @@
+{
+  "mode": "simple",
+  "timestamp": "2026-11-09T17:29:12",
+  "documents": 42,
+  "mean_cer": 0.1861,
+  "mean_table_cell_recall": 0.8383,
+  "by_difficulty": {
+    "easy": {
+      "documents": 12,
+      "mean_cer": 0.1121,
+      "mean_table_cell_recall": 0.9375
+    },
+    "hard": {
+      "documents": 15,
+      "mean_cer": 0.2549,
+      "mean_table_cell_recall": 0.744
+    },
+    "medium": {
+      "documents": 15,
+      "mean_cer": 0.1764,
+      "mean_table_cell_recall": 0.9047
+    }
+  },
+  "by_theme": {
+    "document_multicolonne": {
+      "documents": 6,
+      "mean_cer": 0.0197
+    },
+    "facture": {
+      "documents": 12,
+      "mean_cer": 0.0699
+    },
+    "formulaire": {
+      "documents": 9,
+      "mean_cer": 0.0817
+    },
+    "mixte": {
+      "documents": 6,
+      "mean_cer": 0.2082
+    },
+    "scan": {
+      "documents": 9,
+      "mean_cer": 0.5416
+    }
+  },
+  "results": [
+    {
+      "id": "fact_001",
+      "theme": "facture",
+      "difficulty": "easy",
+      "pages": 1,
+      "seconds": 0.072,
+      "cer": 0.0467,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1290,
+      "truth_chars": 1350
+    },
+    {
+      "id": "fact_002",
+      "theme": "facture",
+      "difficulty": "easy",
+      "pages": 1,
+      "seconds": 0.048,
+      "cer": 0.05,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1391,
+      "truth_chars": 1461
+    },
+    {
+      "id": "fact_003",
+      "theme": "facture",
+      "difficulty": "easy",
+      "pages": 1,
+      "seconds": 0.045,
+      "cer": 0.0566,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1237,
+      "truth_chars": 1307
+    },
+    {
+      "id": "fact_004",
+      "theme": "facture",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 0.065,
+      "cer": 0.0729,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1453,
+      "truth_chars": 1563
+    },
+    {
+      "id": "fact_005",
+      "theme": "facture",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 0.088,
+      "cer": 0.0746,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1653,
+      "truth_chars": 1783
+    },
+    {
+      "id": "fact_006",
+      "theme": "facture",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 0.039,
+      "cer": 0.0746,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1254,
+      "truth_chars": 1354
+    },
+    {
+      "id": "fact_007",
+      "theme": "facture",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 0.042,
+      "cer": 0.0655,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1616,
+      "truth_chars": 1726
+    },
+    {
+      "id": "fact_008",
+      "theme": "facture",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 0.043,
+      "cer": 0.0746,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1666,
+      "truth_chars": 1796
+    },
+    {
+      "id": "fact_009",
+      "theme": "facture",
+      "difficulty": "hard",
+      "pages": 2,
+      "seconds": 0.061,
+      "cer": 0.0742,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 2836,
+      "truth_chars": 3058
+    },
+    {
+      "id": "fact_010",
+      "theme": "facture",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 0.068,
+      "cer": 0.087,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 2029,
+      "truth_chars": 2219
+    },
+    {
+      "id": "fact_011",
+      "theme": "facture",
+      "difficulty": "hard",
+      "pages": 2,
+      "seconds": 0.076,
+      "cer": 0.0768,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 3214,
+      "truth_chars": 3476
+    },
+    {
+      "id": "fact_012",
+      "theme": "facture",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 0.036,
+      "cer": 0.085,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1627,
+      "truth_chars": 1777
+    },
+    {
+      "id": "form_001",
+      "theme": "formulaire",
+      "difficulty": "easy",
+      "pages": 1,
+      "seconds": 0.059,
+      "cer": 0.073,
+      "table_cell_recall": null,
+      "ocr_chars": 996,
+      "truth_chars": 931
+    },
+    {
+      "id": "form_002",
+      "theme": "formulaire",
+      "difficulty": "easy",
+      "pages": 1,
+      "seconds": 0.054,
+      "cer": 0.0511,
+      "table_cell_recall": null,
+      "ocr_chars": 1041,
+      "truth_chars": 998
+    },
+    {
+      "id": "form_003",
+      "theme": "formulaire",
+      "difficulty": "easy",
+      "pages": 1,
+      "seconds": 0.066,
+      "cer": 0.2279,
+      "table_cell_recall": null,
+      "ocr_chars": 995,
+      "truth_chars": 816
+    },
+    {
+      "id": "form_004",
+      "theme": "formulaire",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 0.048,
+      "cer": 0.0531,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1324,
+      "truth_chars": 1394
+    },
+    {
+      "id": "form_005",
+      "theme": "formulaire",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 0.054,
+      "cer": 0.0606,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 994,
+      "truth_chars": 990
+    },
+    {
+      "id": "form_006",
+      "theme": "formulaire",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 0.062,
+      "cer": 0.1054,
+      "table_cell_recall": null,
+      "ocr_chars": 1325,
+      "truth_chars": 1214
+    },
+    {
+      "id": "form_007",
+      "theme": "formulaire",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 0.052,
+      "cer": 0.0789,
+      "table_cell_recall": null,
+      "ocr_chars": 1624,
+      "truth_chars": 1520
+    },
+    {
+      "id": "form_008",
+      "theme": "formulaire",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 0.054,
+      "cer": 0.0322,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 1795,
+      "truth_chars": 1835
+    },
+    {
+      "id": "form_009",
+      "theme": "formulaire",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 0.051,
+      "cer": 0.0533,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 2053,
+      "truth_chars": 2025
+    },
+    {
+      "id": "scan_001",
+      "theme": "scan",
+      "difficulty": "easy",
+      "pages": 1,
+      "seconds": 4.994,
+      "cer": 0.1776,
+      "table_cell_recall": 0.7917,
+      "ocr_chars": 1406,
+      "truth_chars": 1447
+    },
+    {
+      "id": "scan_002",
+      "theme": "scan",
+      "difficulty": "easy",
+      "pages": 1,
+      "seconds": 2.977,
+      "cer": 0.1472,
+      "table_cell_recall": null,
+      "ocr_chars": 1046,
+      "truth_chars": 931
+    },
+    {
+      "id": "scan_003",
+      "theme": "scan",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 6.007,
+      "cer": 0.7009,
+      "table_cell_recall": 0.8667,
+      "ocr_chars": 1422,
+      "truth_chars": 1528
+    },
+    {
+      "id": "scan_004",
+      "theme": "scan",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 4.595,
+      "cer": 0.3494,
+      "table_cell_recall": 0.7381,
+      "ocr_chars": 1193,
+      "truth_chars": 1394
+    },
+    {
+      "id": "scan_005",
+      "theme": "scan",
+      "difficulty": "medium",
+      "pages": 1,
+      "seconds": 9.112,
+      "cer": 0.7111,
+      "table_cell_recall": null,
+      "ocr_chars": 4921,
+      "truth_chars": 4919
+    },
+    {
+      "id": "scan_006",
+      "theme": "scan",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 5.683,
+      "cer": 0.7419,
+      "table_cell_recall": 0.4825,
+      "ocr_chars": 1148,
+      "truth_chars": 2193
+    },
+    {
+      "id": "scan_007",
+      "theme": "scan",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 6.155,
+      "cer": 0.6829,
+      "table_cell_recall": null,
+      "ocr_chars": 799,
+      "truth_chars": 1520
+    },
+    {
+      "id": "scan_008",
+      "theme": "scan",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 4.371,
+      "cer": 0.7127,
+      "table_cell_recall": 0.3974,
+      "ocr_chars": 662,
+      "truth_chars": 1831
+    },
+    {
+      "id": "scan_009",
+      "theme": "scan",
+      "difficulty": "hard",
+      "pages": 1,
+      "seconds": 3.035,
+      "cer": 0.6507,
+      "table_cell_recall": 0.125,
+      "ocr_chars": 869,
+      "truth_chars": 1835
+    },
+    {
+      "id": "mixed_001",
+      "theme": "document_multicolonne",
+      "difficulty": "easy",
+      "pages": 2,
+      "seconds": 0.166,
+      "cer": 0.0175,
+      "table_cell_recall": null,
+      "ocr_chars": 8396,
+      "truth_chars": 8398
+    },
+    {
+      "id": "mixed_002",
+      "theme": "document_multicolonne",
+      "difficulty": "easy",
+      "pages": 2,
+      "seconds": 0.15,
+      "cer": 0.0162,
+      "table_cell_recall": null,
+      "ocr_chars": 9255,
+      "truth_chars": 9257
+    },
+    {
+      "id": "mixed_003",
+      "theme": "document_multicolonne",
+      "difficulty": "medium",
+      "pages": 3,
+      "seconds": 0.173,
+      "cer": 0.0244,
+      "table_cell_recall": null,
+      "ocr_chars": 16004,
+      "truth_chars": 16008
+    },
+    {
+      "id": "mixed_004",
+      "theme": "document_multicolonne",
+      "difficulty": "medium",
+      "pages": 3,
+      "seconds": 0.214,
+      "cer": 0.0147,
+      "table_cell_recall": null,
+      "ocr_chars": 16090,
+      "truth_chars": 16094
+    },
+    {
+      "id": "mixed_005",
+      "theme": "document_multicolonne",
+      "difficulty": "hard",
+      "pages": 5,
+      "seconds": 0.133,
+      "cer": 0.0231,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 27928,
+      "truth_chars": 27996
+    },
+    {
+      "id": "mixed_006",
+      "theme": "document_multicolonne",
+      "difficulty": "hard",
+      "pages": 5,
+      "seconds": 0.145,
+      "cer": 0.0223,
+      "table_cell_recall": 1.0,
+      "ocr_chars": 30183,
+      "truth_chars": 30239
+    },
+    {
+      "id": "mixed_007",
+      "theme": "mixte",
+      "difficulty": "easy",
+      "pages": 2,
+      "seconds": 3.246,
+      "cer": 0.1186,
+      "table_cell_recall": 0.8958,
+      "ocr_chars": 2386,
+      "truth_chars": 2419
+    },
+    {
+      "id": "mixed_008",
+      "theme": "mixte",
+      "difficulty": "easy",
+      "pages": 2,
+      "seconds": 3.265,
+      "cer": 0.363,
+      "table_cell_recall": null,
+      "ocr_chars": 1882,
+      "truth_chars": 1628
+    },
+    {
+      "id": "mixed_009",
+      "theme": "mixte",
+      "difficulty": "medium",
+      "pages": 3,
+      "seconds": 5.492,
+      "cer": 0.0485,
+      "table_cell_recall": 0.7727,
+      "ocr_chars": 12469,
+      "truth_chars": 12465
+    },
+    {
+      "id": "mixed_010",
+      "theme": "mixte",
+      "difficulty": "medium",
+      "pages": 3,
+      "seconds": 6.772,
+      "cer": 0.216,
+      "table_cell_recall": 0.5741,
+      "ocr_chars": 3375,
+      "truth_chars": 3361
+    },
+    {
+      "id": "mixed_011",
+      "theme": "mixte",
+      "difficulty": "hard",
+      "pages": 3,
+      "seconds": 6.296,
+      "cer": 0.2934,
+      "table_cell_recall": 0.6667,
+      "ocr_chars": 3658,
+      "truth_chars": 4103
+    },
+    {
+      "id": "mixed_012",
+      "theme": "mixte",
+      "difficulty": "hard",
+      "pages": 4,
+      "seconds": 5.546,
+      "cer": 0.2096,
+      "table_cell_recall": 0.0,
+      "ocr_chars": 11428,
+      "truth_chars": 13781
+    }
+  ]
+}

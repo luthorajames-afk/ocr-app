@@ -1,0 +1,94 @@
+{
+  "engine": "docling",
+  "timestamp": "2026-11-09T17:33:55",
+  "documents": 8,
+  "mean_cer": 0.3239,
+  "by_difficulty": {
+    "easy": {
+      "documents": 3,
+      "mean_cer": 0.3578
+    },
+    "hard": {
+      "documents": 2,
+      "mean_cer": 0.2988
+    },
+    "medium": {
+      "documents": 3,
+      "mean_cer": 0.3067
+    }
+  },
+  "results": [
+    {
+      "id": "fact_001",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "docling",
+      "cer": 0.3467,
+      "seconds": 78.62,
+      "chars": 1195
+    },
+    {
+      "id": "fact_004",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "docling",
+      "cer": 0.3263,
+      "seconds": 50.42,
+      "chars": 1415
+    },
+    {
+      "id": "fact_009",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "docling",
+      "cer": 0.3244,
+      "seconds": 51.66,
+      "chars": 2784
+    },
+    {
+      "id": "fact_002",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "docling",
+      "cer": 0.3504,
+      "seconds": 15.71,
+      "chars": 1289
+    },
+    {
+      "id": "fact_005",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "docling",
+      "cer": 0.2793,
+      "seconds": 15.45,
+      "chars": 1654
+    },
+    {
+      "id": "fact_010",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "docling",
+      "cer": 0.2731,
+      "seconds": 18.82,
+      "chars": 2118
+    },
+    {
+      "id": "fact_003",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "docling",
+      "cer": 0.3764,
+      "seconds": 11.29,
+      "chars": 1140
+    },
+    {
+      "id": "fact_006",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "docling",
+      "cer": 0.3146,
+      "seconds": 14.52,
+      "chars": 1259
+    }
+  ]
+}

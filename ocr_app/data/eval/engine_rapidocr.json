@@ -1,0 +1,130 @@
+{
+  "engine": "rapidocr",
+  "timestamp": "2026-11-09T17:32:38",
+  "documents": 12,
+  "mean_cer": 0.1916,
+  "by_difficulty": {
+    "easy": {
+      "documents": 4,
+      "mean_cer": 0.155
+    },
+    "hard": {
+      "documents": 4,
+      "mean_cer": 0.2123
+    },
+    "medium": {
+      "documents": 4,
+      "mean_cer": 0.2077
+    }
+  },
+  "results": [
+    {
+      "id": "fact_001",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.1585,
+      "seconds": 14.01,
+      "chars": 1286
+    },
+    {
+      "id": "fact_004",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.279,
+      "seconds": 13.64,
+      "chars": 1371
+    },
+    {
+      "id": "fact_009",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.2292,
+      "seconds": 25.91,
+      "chars": 2823
+    },
+    {
+      "id": "fact_002",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.1513,
+      "seconds": 10.39,
+      "chars": 1388
+    },
+    {
+      "id": "fact_005",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.1845,
+      "seconds": 12.47,
+      "chars": 1646
+    },
+    {
+      "id": "fact_010",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.2118,
+      "seconds": 14.58,
+      "chars": 2023
+    },
+    {
+      "id": "fact_003",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.2242,
+      "seconds": 8.84,
+      "chars": 1231
+    },
+    {
+      "id": "fact_006",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.1979,
+      "seconds": 8.88,
+      "chars": 1160
+    },
+    {
+      "id": "fact_011",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.2382,
+      "seconds": 20.49,
+      "chars": 3137
+    },
+    {
+      "id": "form_001",
+      "difficulty": "easy",
+      "theme": "formulaire",
+      "used": "rapidocr",
+      "cer": 0.0859,
+      "seconds": 7.75,
+      "chars": 1002
+    },
+    {
+      "id": "fact_007",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.1692,
+      "seconds": 10.18,
+      "chars": 1613
+    },
+    {
+      "id": "fact_012",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "rapidocr",
+      "cer": 0.1699,
+      "seconds": 10.67,
+      "chars": 1578
+    }
+  ]
+}

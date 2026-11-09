@@ -1,0 +1,130 @@
+{
+  "engine": "tesseract",
+  "timestamp": "2026-11-09T17:31:16",
+  "documents": 12,
+  "mean_cer": 0.144,
+  "by_difficulty": {
+    "easy": {
+      "documents": 4,
+      "mean_cer": 0.1364
+    },
+    "hard": {
+      "documents": 4,
+      "mean_cer": 0.1531
+    },
+    "medium": {
+      "documents": 4,
+      "mean_cer": 0.1425
+    }
+  },
+  "results": [
+    {
+      "id": "fact_001",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.1437,
+      "seconds": 5.7,
+      "chars": 1239
+    },
+    {
+      "id": "fact_004",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.2028,
+      "seconds": 5.21,
+      "chars": 1441
+    },
+    {
+      "id": "fact_009",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.1998,
+      "seconds": 10.11,
+      "chars": 2812
+    },
+    {
+      "id": "fact_002",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.1533,
+      "seconds": 6.29,
+      "chars": 1306
+    },
+    {
+      "id": "fact_005",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.152,
+      "seconds": 8.19,
+      "chars": 1588
+    },
+    {
+      "id": "fact_010",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.1077,
+      "seconds": 5.75,
+      "chars": 2014
+    },
+    {
+      "id": "fact_003",
+      "difficulty": "easy",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.1561,
+      "seconds": 4.81,
+      "chars": 1212
+    },
+    {
+      "id": "fact_006",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.1226,
+      "seconds": 5.38,
+      "chars": 1282
+    },
+    {
+      "id": "fact_011",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.1407,
+      "seconds": 8.88,
+      "chars": 3191
+    },
+    {
+      "id": "form_001",
+      "difficulty": "easy",
+      "theme": "formulaire",
+      "used": "tesseract",
+      "cer": 0.0924,
+      "seconds": 4.17,
+      "chars": 1008
+    },
+    {
+      "id": "fact_007",
+      "difficulty": "medium",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.0927,
+      "seconds": 5.07,
+      "chars": 1596
+    },
+    {
+      "id": "fact_012",
+      "difficulty": "hard",
+      "theme": "facture",
+      "used": "tesseract",
+      "cer": 0.1643,
+      "seconds": 3.88,
+      "chars": 1600
+    }
+  ]
+}
