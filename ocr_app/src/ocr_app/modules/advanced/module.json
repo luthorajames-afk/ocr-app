@@ -1,0 +1,8 @@
+{
+  "id": "advanced",
+  "version": "1.0.0",
+  "min_app_version": "1.0.0",
+  "mode": "advanced",
+  "worker": "worker_advanced.exe",
+  "sha256": "PLACEHOLDER_SHA256_ADVANCED_WORKER"
+}

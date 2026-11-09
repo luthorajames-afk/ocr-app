@@ -1,0 +1,8 @@
+{
+  "id": "medium",
+  "version": "1.0.0",
+  "min_app_version": "1.0.0",
+  "mode": "medium",
+  "worker": "worker_medium.exe",
+  "sha256": "PLACEHOLDER_SHA256_MEDIUM_WORKER"
+}
