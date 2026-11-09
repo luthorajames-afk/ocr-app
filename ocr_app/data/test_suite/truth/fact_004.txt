@@ -1,0 +1,32 @@
+Atelier Rousseau
+Conseil et maintenance informatique
+7 impasse des Glycines
+31000 Toulouse
+Tél. 05 61 48 22 07
+devis@atelier-rousseau.fr
+FACTURÉ À
+M. François Lefèvre
+8 avenue de la Gare
+69003 Lyon
+francois.lefevre@example.fr
+TVA FR 23 556677889
+FACTURE
+N° FA-2026-0104  ·  9 juin 2026  ·  échéance 9 juillet 2026
+Désignation | Unité | Qté | P.U. HT | TVA | Montant HT
+Onduleur 650 VA | unité | 1 | 99,00 € | 20 % | 99,00 €
+Installation et configuration | forfait | 8 | 120,00 € | 20 % | 960,00 €
+Station d'accueil USB-C | unité | 4 | 149,00 € | 20 % | 596,00 €
+Lampe de bureau LED | unité | 5 | 39,90 € | 20 % | 199,50 €
+Clavier mécanique AZERTY | unité | 8 | 79,90 € | 20 % | 639,20 €
+Webcam Full HD | unité | 10 | 59,90 € | 20 % | 599,00 €
+Bureau assis-debout | unité | 2 | 549,00 € | 20 % | 1 098,00 €
+Stylo bille bleu | unité | 5 | 1,20 € | 20 % | 6,00 €
+Écran 27 pouces LED | unité | 5 | 189,00 € | 20 % | 945,00 €
+Cartouche d'encre noire | unité | 8 | 42,80 € | 20 % | 342,40 €
+Sous-total HT : 5 484,10 €
+TVA 20 % (base 5 484,10 €) : 1 096,82 €
+Total TTC : 6 580,92 €
+MODALITÉS DE RÈGLEMENT
+Paiement à réception de la facture. Virement bancaire sur le compte IBAN FR14 2004 1010 0505 0001 3M02 606 — BIC PSSTFRPPMON. Merci de rappeler le numéro de facture en référence.
+Atelier Rousseau — Conseil et maintenance informatique — SIRET 503 219 874 00013 — TVA intracommunautaire FR 41 503219874. Pénalités de retard : trois fois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.
+Page 1 / 1

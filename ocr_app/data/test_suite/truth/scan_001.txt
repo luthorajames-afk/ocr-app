@@ -1,0 +1,31 @@
+SARL Dupont & Fils
+Matériel informatique et bureautique
+42 rue des Lilas · 75012 Paris
+Tél. 01 43 27 65 18 — contact@dupont-fils.fr
+SIRET 812 345 678 00027 — TVA FR 32 812345678
+FACTURE
+N° SC-2026-001
+Date : 6 février 2026
+Échéance : 8 mars 2026
+FACTURÉ À
+Mme Élodie Marchand
+14 rue des Écoles
+75011 Paris
+elodie.marchand@example.fr
+TVA FR 12 445566778
+Désignation | Unité | Qté | P.U. HT | TVA | Montant HT
+Support téléphone | unité | 3 | 19,90 € | 20 % | 59,70 €
+Câble HDMI 2 m | unité | 6 | 12,90 € | 20 % | 77,40 €
+Disque SSD externe 1 To | unité | 6 | 119,00 € | 20 % | 714,00 €
+Prestation de maintenance | heure | 8 | 90,00 € | 20 % | 720,00 €
+Clavier mécanique AZERTY | unité | 4 | 79,90 € | 20 % | 319,60 €
+Pochette de 100 chemises | lot | 3 | 18,60 € | 20 % | 55,80 €
+Bloc-notes A5 | unité | 8 | 3,80 € | 5,5 % | 30,40 €
+Sous-total HT : 1 976,90 €
+TVA 5,5 % (base 30,40 €) : 1,67 €
+TVA 20 % (base 1 946,50 €) : 389,30 €
+Total TTC : 2 367,87 €
+MODALITÉS DE RÈGLEMENT
+Paiement à réception de la facture. Virement bancaire sur le compte IBAN FR76 3000 4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de facture en référence.
+SARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois fois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.
+Page 1 / 1
