@@ -1,4 +1,5 @@
-"""Barre inférieure : progression page X/Y + Pause / Annuler / Copier / Exporter."""
+"""Barre inférieure : progression page X/Y + Pause / Annuler / Réinitialiser /
+Copier / Exporter, statistiques d'édition et temps de traitement."""
 
 from __future__ import annotations
 
@@ -22,11 +23,26 @@ from ocr_app.ui.icons import make_icon
 from ocr_app.ui.task_format import stage_label, task_percent
 
 
+def format_duration(seconds: Optional[float]) -> Optional[str]:
+    """Durée lisible : « 7 s », « 1 min 24 s », « 1 h 03 min » (sinon None)."""
+    if seconds is None or seconds < 0:
+        return None
+    total = int(round(seconds))
+    if total < 60:
+        return f"{total} s"
+    minutes, rest = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes} min {rest:02d} s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes:02d} min"
+
+
 class BottomBar(QWidget):
     """Barre d'état inférieure de l'application."""
 
     pause_clicked = Signal()
     cancel_clicked = Signal()
+    reset_clicked = Signal()
     copy_clicked = Signal()
     export_clicked = Signal()
 
@@ -58,6 +74,11 @@ class BottomBar(QWidget):
         self._progress_text.setText("Aucun document")
         label_row.addWidget(self._progress_text)
         label_row.addStretch(1)
+        self._edit_stats = QLabel("", progress_box)
+        self._edit_stats.setObjectName("ProgressText")
+        self._edit_stats.setTextFormat(Qt.TextFormat.RichText)
+        self._edit_stats.hide()
+        label_row.addWidget(self._edit_stats)
         self._percent = QLabel("—", progress_box)
         self._percent.setObjectName("ProgressPercent")
         label_row.addWidget(self._percent)
@@ -93,6 +114,13 @@ class BottomBar(QWidget):
             "close", "Annuler le traitement", progress_box
         )
         self._cancel.setAccessibleName("Annuler")
+        self._reset = self._make_text_button(
+            "reset", "Réinitialiser", "StatusButton", progress_box
+        )
+        self._reset.setAccessibleName("Réinitialiser")
+        self._reset.setToolTip(
+            "Recharger le texte d'origine (annule les éditions avant copie)"
+        )
         self._copy = self._make_text_button(
             "copy", "Copier", "StatusButton", progress_box
         )
@@ -102,11 +130,13 @@ class BottomBar(QWidget):
 
         self._pause.clicked.connect(self.pause_clicked)
         self._cancel.clicked.connect(self.cancel_clicked)
+        self._reset.clicked.connect(self.reset_clicked)
         self._copy.clicked.connect(self.copy_clicked)
         self._export.clicked.connect(self.export_clicked)
 
         layout.addWidget(self._pause)
         layout.addWidget(self._cancel)
+        layout.addWidget(self._reset)
         layout.addWidget(self._copy)
         layout.addWidget(self._export)
 
@@ -211,10 +241,33 @@ class BottomBar(QWidget):
     def set_content_available(self, available: bool) -> None:
         self._copy.setEnabled(available)
         self._export.setEnabled(available)
+        self._reset.setEnabled(available)
         copy_color = theme.TEXT if available else "#a4aab4"
         export_color = "#ffffff" if available else "#a4aab4"
+        reset_color = theme.TEXT if available else "#a4aab4"
         self._copy.setIcon(make_icon("copy", copy_color, 15))
         self._export.setIcon(make_icon("download", export_color, 15))
+        self._reset.setIcon(make_icon("reset", reset_color, 15))
+
+    def set_edit_stats(
+        self,
+        modified: int = 0,
+        total: int = 0,
+        elapsed_seconds: Optional[float] = None,
+    ) -> None:
+        """Statistiques d'édition : « 2 / 3 blocs modifiés · 12 s »."""
+        parts = []
+        if total > 0:
+            parts.append(f"<b>{modified} / {total}</b> blocs modifiés")
+        duration = format_duration(elapsed_seconds)
+        if duration is not None:
+            parts.append(duration)
+        if parts:
+            self._edit_stats.setText(" · ".join(parts))
+            self._edit_stats.show()
+        else:
+            self._edit_stats.setText("")
+            self._edit_stats.hide()
 
     def set_paused(self, paused: bool) -> None:
         if paused:

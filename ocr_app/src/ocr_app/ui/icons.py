@@ -144,6 +144,27 @@ def _paint(name: str, painter: QPainter, color: str) -> None:
         path.lineTo(14.2, 10.8)
         path.lineTo(16.2, 13.0)
         painter.drawPath(path)
+    elif name == "reset":
+        # Flèche circulaire (rotate-ccw) : arc + pointe, pour « Réinitialiser ».
+        center = QPointF(10.0, 10.0)
+        radius = 5.4
+        painter.drawArc(QRectF(4.6, 4.6, 10.8, 10.8), 140 * 16, 290 * 16)
+        angle = math.radians(140.0)
+        tip = QPointF(
+            center.x() + radius * math.cos(angle),
+            center.y() - radius * math.sin(angle),
+        )
+        # Tangente inverse au départ de l'arc, ±25° pour les deux barbes.
+        backward = math.degrees(math.atan2(-math.sin(angle), math.cos(angle)))
+        for offset in (-25.0, 25.0):
+            barb_angle = math.radians(backward + offset)
+            painter.drawLine(
+                tip,
+                QPointF(
+                    tip.x() + 3.0 * math.cos(barb_angle),
+                    tip.y() + 3.0 * math.sin(barb_angle),
+                ),
+            )
     else:
         # Repli : petit carré, pour ne jamais produire une icône vide.
         painter.drawRoundedRect(QRectF(4, 4, 12, 12), 2, 2)

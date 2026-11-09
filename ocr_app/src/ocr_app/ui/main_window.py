@@ -1,11 +1,16 @@
-"""Fenêtre principale AOCRI (phase 4) — fidèle au mockup validé.
+"""Fenêtre principale AOCRI (phase 5) — fidèle au mockup validé.
 
 La fenêtre ne fait aucun OCR : elle affiche les résultats produits par les
 workers en sous-processus et pilote pause / reprise / annulation (R2).
+Phase 5 : édition avant copie (R9) — l'``EditSession`` porte le document
+courant, l'annulation (Ctrl+Z) / le rétablissement (Ctrl+Y) et le lien
+bidirectionnel bloc ↔ texte ; l'aperçu et les trois onglets se rafraîchissent
+depuis le modèle édité.
 """
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -26,10 +31,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ocr_app.core.data_model import Page
 from ocr_app.core.exports import Exporter
 from ocr_app.core.task_queue import Task, TaskStatus
 from ocr_app.ui import file_utils
 from ocr_app.ui.demo_data import DEMO_FILES
+from ocr_app.ui.edit_session import (
+    EditSession,
+    block_identity,
+    load_pages_from_dir,
+)
 from ocr_app.ui.icons import app_icon
 from ocr_app.ui.modules_info import demo_modules, detect_modules
 from ocr_app.ui.task_format import mode_label
@@ -77,6 +88,7 @@ class MainWindow(QMainWindow):
         self._demo_active = False
 
         self._runner = TaskRunner(self)
+        self._edit_session = EditSession(self)
         self._build_ui()
         self._connect_signals()
 
@@ -128,9 +140,17 @@ class MainWindow(QMainWindow):
 
         self._sidebar.file_selected.connect(self._on_file_selected)
         self._preview.block_selected.connect(self._on_block_selected)
+        self._results.block_clicked.connect(self._on_results_block_clicked)
+        self._results.block_text_committed.connect(
+            self._on_block_text_committed
+        )
+        self._results.notice.connect(self._on_notice)
+        # Éditeur inline ouvert : Ctrl+Z/Ctrl+Y restent locaux à l'éditeur.
+        self._results.editing_changed.connect(self._on_editing_changed)
 
         self._bottom.pause_clicked.connect(self._toggle_pause)
         self._bottom.cancel_clicked.connect(self._cancel_current)
+        self._bottom.reset_clicked.connect(self._reset_edits)
         self._bottom.copy_clicked.connect(self._copy_page)
         self._bottom.export_clicked.connect(self._show_export_menu)
 
@@ -140,17 +160,32 @@ class MainWindow(QMainWindow):
         self._runner.error_occurred.connect(self._on_error)
         self._runner.notice.connect(self._on_notice)
 
+        # Session d'édition : le modèle est la source de vérité, les vues se
+        # rafraîchissent à chaque documentChanged (édition, undo, redo).
+        self._edit_session.documentChanged.connect(self._on_document_changed)
+        self._edit_session.dirtyChanged.connect(self._on_dirty_changed)
+        self._edit_session.documentReloaded.connect(self._refresh_edit_status)
+
+        self._undo_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self)
+        self._undo_shortcut.activated.connect(self._undo_edits)
+        self._redo_shortcut = QShortcut(QKeySequence("Ctrl+Y"), self)
+        self._redo_shortcut.activated.connect(self._redo_edits)
+        self._redo_alt_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Z"), self)
+        self._redo_alt_shortcut.activated.connect(self._redo_edits)
+
         shortcut = QShortcut(QKeySequence("Ctrl+O"), self)
         shortcut.activated.connect(self._choose_files)
 
     def _reset_view(self) -> None:
         self._selected_id = None
+        self._edit_session.clear()
         self._preview.show_placeholder()
         self._results.clear(
             "Aucun résultat à afficher — ajoutez des fichiers PDF, JPG ou PNG."
         )
         self._bottom.set_task(None)
         self._bottom.set_content_available(False)
+        self._refresh_edit_status()
 
     # --- Ajout de fichiers ------------------------------------------------
     def _choose_files(self) -> None:
@@ -224,7 +259,12 @@ class MainWindow(QMainWindow):
                     stage=spec.stage,
                 )
             if spec.page is not None:
-                self._runner.register_page(task.id, spec.page)
+                # Copie profonde : les pages de DEMO_FILES sont des singletons
+                # de module ; sans copie, une édition de la fenêtre démo fuit
+                # vers la fenêtre démo suivante (contamination inter-tests).
+                self._runner.register_page(
+                    task.id, Page.from_dict(spec.page.to_dict())
+                )
             updated = self._runner.task(task.id)
             self._sidebar.add_task(updated)
             if first_id is None:
@@ -270,7 +310,13 @@ class MainWindow(QMainWindow):
             self._preview.show_page(page)
             self._results.set_page(page)
             self._bottom.set_content_available(True)
+            # Nouveau document affiché : la session d'édition démarre propre
+            # (instantané « origine » pris sur les pages du runner).
+            self._edit_session.load_document(
+                self._runner.document_for(task_id), task_id=task_id
+            )
         else:
+            self._edit_session.clear()
             self._preview.show_placeholder(title=name, info=info)
             if task.status == TaskStatus.PENDING:
                 message = "Ce document est en attente de traitement."
@@ -284,6 +330,7 @@ class MainWindow(QMainWindow):
             self._bottom.set_content_available(False)
 
         self._bottom.set_task(task)
+        self._refresh_edit_status()
 
     @staticmethod
     def _task_info(task: Task) -> str:
@@ -316,6 +363,8 @@ class MainWindow(QMainWindow):
                 else "Le traitement a échoué."
             )
             self._results.clear(message)
+        # Temps de traitement : recalculé à chaque progression de la tâche.
+        self._refresh_edit_status()
 
     def _on_task_started(self, task_id: str) -> None:
         selected = (
@@ -343,6 +392,17 @@ class MainWindow(QMainWindow):
         self._bottom.set_content_available(True)
         if task is not None:
             self._bottom.set_task(task)
+        # La page fraîchement traitée rejoint la session d'édition courante :
+        # les éditions des autres pages restent annulables.
+        if self._edit_session.task_id == task_id and (
+            self._edit_session.document is not None
+        ):
+            self._edit_session.adopt_page(page)
+        else:
+            self._edit_session.load_document(
+                self._runner.document_for(task_id), task_id=task_id
+            )
+        self._refresh_edit_status()
 
     def _on_error(self, task_id: str, message: str) -> None:
         self._bottom.show_toast(f"Erreur : {message}", error=True, timeout=7000)
@@ -377,6 +437,14 @@ class MainWindow(QMainWindow):
 
     # --- Copie / export ---------------------------------------------------
     def _selected_page(self):
+        """Page actuellement affichée dans le panneau de résultats.
+
+        On copie / réinitialise ce qui est à l'écran (R9 : édition avant
+        copie), pas nécessairement la dernière page reçue du worker.
+        """
+        page = self._results.current_page()
+        if page is not None:
+            return page
         if self._selected_id is None:
             return None
         return self._runner.latest_page(self._selected_id)
@@ -423,6 +491,9 @@ class MainWindow(QMainWindow):
         button = self._bottom.export_button
         anchor = button.mapToGlobal(QPoint(0, -menu.sizeHint().height()))
         menu.exec(anchor)
+        # Un menu parenté à la fenêtre s'accumule à chaque ouverture : libéré
+        # après la fermeture (exec est bloquant, deleteLater est donc sûr ici).
+        menu.deleteLater()
 
     def _export_task(self, fmt: str) -> None:
         if self._selected_id is None:
@@ -494,6 +565,7 @@ class MainWindow(QMainWindow):
 
         menu = self._build_settings_menu()
         menu.exec(QCursor.pos())
+        menu.deleteLater()  # même raison que le menu d'export
 
     def _open_work_dir(self) -> None:
         try:
@@ -515,8 +587,8 @@ class MainWindow(QMainWindow):
             "Modules OCR",
             "Modules détectés sur cette machine :\n\n"
             + "\n".join(lines)
-            + "\n\nPhase 4 : le worker factice simule la progression pour "
-            "tous les modes.",
+            + "\n\nPhase 5 : l'édition avant copie (R9) est branchée — "
+            "double-clic sur un bloc de texte dans Rendu ou Texte brut.",
         )
 
     def _show_about(self) -> None:
@@ -539,8 +611,108 @@ class MainWindow(QMainWindow):
             timeout=2200,
         )
 
+    # --- Lien bloc ↔ texte + édition (phase 5, R9) ------------------------
     def _on_block_selected(self, index: int) -> None:
-        self._results.scroll_to_block(index)
+        """Sélection depuis l'aperçu : défilement + surlignage du texte."""
+        self._results.set_active_block(index, reveal=True)
+        self._preview.set_active_block(index)
+
+    def _on_results_block_clicked(self, index: int) -> None:
+        """Clic sur un texte (rendu ou brut) : surcouche mise en évidence."""
+        self._preview.select_block(index)
+        self._results.set_active_block(index)
+
+    def _on_block_text_committed(self, index: int, new_text: str) -> None:
+        """Édition inline validée : le modèle ``Page`` est mis à jour."""
+        page = self._results.current_page()
+        if page is None or not 0 <= index < len(page.blocks):
+            return
+        block = page.blocks[index]
+        self._edit_session.update_block_text(
+            page.number, block_identity(block, index), new_text
+        )
+
+    def _on_document_changed(self, page_number: int, block_id: str) -> None:
+        """Le modèle a changé (édition, undo, redo) : vues + statut."""
+        index = self._edit_session.block_index(page_number, block_id)
+        changed_page = self._edit_session.page(page_number)
+        displayed = self._selected_page()
+        if changed_page is not None and changed_page is displayed:
+            tab = self._results.current_tab_index()
+            self._preview.show_page(changed_page)
+            self._results.set_page(changed_page, active_block=index)
+            self._results.show_tab(tab)
+            if index is not None:
+                self._preview.select_block(index)
+        self._refresh_edit_status()
+
+    def _on_dirty_changed(self, dirty: bool) -> None:
+        self._refresh_edit_status()
+
+    def _on_editing_changed(self, editing: bool) -> None:
+        """Éditeur inline ouvert : Ctrl+Z/Ctrl+Y annulent le texte en cours."""
+        for shortcut in (
+            self._undo_shortcut,
+            self._redo_shortcut,
+            self._redo_alt_shortcut,
+        ):
+            shortcut.setEnabled(not editing)
+
+    def _undo_edits(self) -> None:
+        if not self._edit_session.undo():
+            self._bottom.show_toast("Rien à annuler.", error=True)
+
+    def _redo_edits(self) -> None:
+        if not self._edit_session.redo():
+            self._bottom.show_toast("Rien à rétablir.", error=True)
+
+    def _reset_edits(self) -> None:
+        """Bouton Réinitialiser : recharge le texte d'origine du document."""
+        if not self._edit_session.is_dirty():
+            self._bottom.show_toast(
+                "Aucune modification à réinitialiser.", error=True
+            )
+            return
+        task = (
+            self._runner.task(self._selected_id) if self._selected_id else None
+        )
+        pages = None
+        result_dir = getattr(task, "result_dir", None) if task else None
+        if result_dir:
+            pages = load_pages_from_dir(Path(result_dir))
+        self._edit_session.reset(pages)
+        page = self._selected_page()
+        if page is not None:
+            self._preview.show_page(page)
+            self._results.set_page(page)
+        self._refresh_edit_status()
+        self._bottom.show_toast(
+            "Modifications réinitialisées — texte d'origine restauré."
+        )
+
+    def _refresh_edit_status(self) -> None:
+        """Titre (« ● modifié ») + statistiques de la barre inférieure."""
+        dirty = self._edit_session.is_dirty()
+        title = f"● {WINDOW_TITLE}" if dirty else WINDOW_TITLE
+        if self.windowTitle() != title:
+            self.setWindowTitle(title)
+        task = (
+            self._runner.task(self._selected_id) if self._selected_id else None
+        )
+        self._bottom.set_edit_stats(
+            self._edit_session.modified_block_count(),
+            self._edit_session.total_block_count(),
+            self._processing_seconds(task),
+        )
+
+    @staticmethod
+    def _processing_seconds(task: Optional[Task]) -> Optional[float]:
+        """Temps de traitement mesuré sur les horodatages de la tâche."""
+        if task is None or task.status == TaskStatus.PENDING:
+            return None
+        if task.status in (TaskStatus.RUNNING, TaskStatus.PAUSED):
+            return max(0.0, time.time() - task.created_at)
+        return max(0.0, task.updated_at - task.created_at)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - API Qt
         self._runner.shutdown()

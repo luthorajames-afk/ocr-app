@@ -291,6 +291,7 @@ class BlockOverlayItem(QGraphicsRectItem):
         self.index = index
         self._label = label
         self._hover = False
+        self._active = False
         self.setZValue(10)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
@@ -325,11 +326,24 @@ class BlockOverlayItem(QGraphicsRectItem):
         path.addRect(self._tag_rect())
         return path
 
+    def set_active(self, active: bool) -> None:
+        """Bloc correspondant au texte sélectionné dans les résultats."""
+        if self._active != active:
+            self._active = active
+            self.update()
+
     def paint(self, painter: QPainter, option, widget=None) -> None:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         selected = self.isSelected()
-        alpha = 55 if selected else (40 if self._hover else 26)
-        painter.setPen(QPen(QColor(theme.ACCENT), 2.4 if selected else 1.5))
+        if self._active:
+            alpha, width = 85, 2.8
+        elif selected:
+            alpha, width = 55, 2.4
+        elif self._hover:
+            alpha, width = 40, 1.5
+        else:
+            alpha, width = 26, 1.5
+        painter.setPen(QPen(QColor(theme.ACCENT), width))
         painter.setBrush(QColor(47, 91, 215, alpha))
         painter.drawRect(self.rect())
 
@@ -388,6 +402,7 @@ class PreviewView(QGraphicsView):
         self._zoom = 1.0
         self._overlays: List[BlockOverlayItem] = []
         self._placeholder = True
+        self._programmatic = False
         self._scene.selectionChanged.connect(self._on_selection_changed)
         self.set_zoom(1.0, emit=False)
 
@@ -489,7 +504,37 @@ class PreviewView(QGraphicsView):
         super().wheelEvent(event)
 
     # --- Sélection --------------------------------------------------------
+    def select_block(self, index: int, emit: bool = False) -> bool:
+        """Sélectionne la surcouche d'un bloc (lien texte → aperçu).
+
+        La sélection est programmatique : aucun signal n'est émis sauf si
+        ``emit`` est vrai, pour éviter toute boucle avec le panneau résultat.
+        """
+        overlay = next(
+            (item for item in self._overlays if item.index == index), None
+        )
+        if overlay is None:
+            return False
+        self._programmatic = True
+        try:
+            for item in self._overlays:
+                item.setSelected(item is overlay)
+            overlay.set_active(True)
+            self.ensureVisible(overlay, 60, 60)
+        finally:
+            self._programmatic = False
+        if emit:
+            self.block_selected.emit(index)
+        return True
+
+    def set_active_block(self, index: Optional[int]) -> None:
+        """Met en évidence la surcouche du bloc actif (sans la sélectionner)."""
+        for item in self._overlays:
+            item.set_active(item.index == index)
+
     def _on_selection_changed(self) -> None:
+        if self._programmatic:
+            return
         for item in self._scene.selectedItems():
             if isinstance(item, BlockOverlayItem):
                 self.block_selected.emit(item.index)
@@ -597,3 +642,11 @@ class PreviewPanel(QWidget):
 
     def show_page(self, page: Page) -> None:
         self.view.show_page(page)
+
+    def select_block(self, index: int, emit: bool = False) -> bool:
+        """Sélectionne la surcouche du bloc donné et la rend visible."""
+        return self.view.select_block(index, emit=emit)
+
+    def set_active_block(self, index: Optional[int]) -> None:
+        """Met en évidence la surcouche du bloc actif."""
+        self.view.set_active_block(index)
