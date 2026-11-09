@@ -1,8 +1,8 @@
-# Application OCR hors ligne (Windows)
+# AOCRI — Advanced Optical Character Recognition for Itamba
 
 OCR avancé avec conservation de la mise en page — documents PDF, JPG, PNG.
 
-Auteur : Elvis · Version : 1.0 · Date : 9 novembre 2026
+Éditeur : Kriesty Solutions · Version : 1.0 · Date : 9 novembre 2026
 
 ## Présentation
 

@@ -23,3 +23,6 @@ htmlcov/
 # OS
 Thumbs.db
 .DS_Store.zcode/
+
+# Modeles OCR (fournis par l'installeur, non versionnes)
+models/

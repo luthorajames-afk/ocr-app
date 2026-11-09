@@ -8,14 +8,17 @@ Les échanges se font par lignes JSON sur stdin/stdout :
 
 Le protocole est volontairement générique : un worker factice peut l'implémenter
 pour valider la progression et l'annulation avant d'y brancher un moteur OCR.
+
+Toutes les lignes sont encodées en UTF-8 (R14) et ``parse_line`` garantit qu'un
+message décodé est toujours un objet JSON (dict), jamais une liste ou un scalaire.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
-from typing import Optional, Any
-from enum import Enum
 import json
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
 
 
 class MessageType(str, Enum):
@@ -80,8 +83,25 @@ class CommandMessage:
 
 
 def parse_line(line: str) -> dict:
-    """Parse une ligne JSON brute en dictionnaire. Lève ValueError si invalide."""
-    line = line.strip()
-    if not line:
+    """Parse une ligne JSON brute en dictionnaire.
+
+    Lève ``ValueError`` si la ligne est vide, n'est pas du JSON valide ou ne
+    représente pas un objet JSON (un worker ne doit jamais envoyer de liste).
+    """
+    if not isinstance(line, str):
+        raise ValueError("ligne de protocole non textuelle")
+    stripped = line.strip().lstrip("\ufeff")
+    if not stripped:
         raise ValueError("ligne vide")
-    return json.loads(line)
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"ligne JSON invalide (ligne {exc.lineno}, colonne {exc.colno}) : "
+            f"{exc.msg}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"message JSON invalide : objet attendu, {type(data).__name__} reçu"
+        )
+    return data

@@ -1,5 +1,8 @@
 # PROJECT.md — Règles applicables à la session de travail
 
+**Produit :** AOCRI — Advanced Optical Character Recognition for Itamba
+**Éditeur :** Kriesty Solutions
+
 Ce document synthétise les règles en vigueur pour le développement de l'application OCR hors ligne (Windows). Elles sont issues des « pièges à éviter » listés dans le plan de travail v1 (15 items) et doivent être respectées par tous les contributeurs pendant cette session.
 
 ## Règles techniques

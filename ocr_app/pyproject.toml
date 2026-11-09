@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ocr-app"
+name = "aocri"
 version = "1.0.0"
-description = "Application OCR hors ligne (Windows) — OCR avancé avec conservation de la mise en page"
+description = "AOCRI — Advanced Optical Character Recognition for Itamba. Application OCR hors ligne par Kriesty Solutions."
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Elvis" }]
+authors = [{ name = "Kriesty Solutions" }]
 license = { text = "Proprietary" }
 dependencies = [
     "pypdfium2",
@@ -18,12 +18,13 @@ dependencies = [
 
 [project.optional-dependencies]
 simple = ["tesserocr"]
-medium = ["rapidocr-onnxruntime", "opencv-python-headless"]
+medium = ["rapidocr", "opencv-python-headless"]
 advanced = ["docling"]
 ui = ["pyside6"]
 dev = ["pytest", "pyinstaller"]
 
 [project.scripts]
+aocri = "ocr_app.cli:main"
 ocr-app = "ocr_app.cli:main"
 
 [tool.setuptools.packages.find]

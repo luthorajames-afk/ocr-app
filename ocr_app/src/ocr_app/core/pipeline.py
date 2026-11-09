@@ -13,7 +13,7 @@ from typing import Optional, Callable
 from enum import Enum
 from pathlib import Path
 
-from ocr_app.core.data_model import Page, Document
+from ocr_app.core.data_model import Block, BlockType, Page, Document
 
 
 class PipelineStage(str, Enum):
@@ -66,12 +66,15 @@ class Pipeline:
             number=page_number,
             source=page_input,
             blocks=[
-                {
-                    "type": "paragraph",
-                    "text": f"[page {page_number}] contenu OCR (squelette - à remplacer par le worker)",
-                    "bbox": (0.0, 0.0, 100.0, 100.0),
-                    "confidence": 0.0,
-                }
+                Block(
+                    type=BlockType.PARAGRAPH,
+                    text=(
+                        f"[page {page_number}] contenu OCR "
+                        "(squelette - à remplacer par le worker)"
+                    ),
+                    bbox=(0.0, 0.0, 100.0, 100.0),
+                    confidence=0.0,
+                )
             ],
             confidence=1.0,
         )
