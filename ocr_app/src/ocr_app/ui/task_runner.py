@@ -22,6 +22,13 @@ from ocr_app.ui.worker_commands import accepts_input_document
 
 logger = logging.getLogger(__name__)
 
+# Attribut « portable » posé sur chaque Page chargée depuis un résultat :
+# le dossier de travail de la tâche, où le worker écrit page_NNN.json et
+# page_NNN.png (plan v1). L'aperçu (ui/widgets/preview.py) s'en sert pour
+# afficher l'image réelle de la page en fond. Attribut transient volontaire
+# (hors data_model, lecture seule) : il ne survit pas à une sérialisation.
+PAGE_WORK_DIR_ATTR = "work_dir"
+
 
 class TaskRunner(QObject):
     """File de tâches + pilotage des workers en sous-processus."""
@@ -459,6 +466,12 @@ class TaskRunner(QObject):
             return
 
         self._pages.setdefault(task.id, {})[page.number] = page
+        # L'aperçu charge page_NNN.png depuis ce dossier (plan v1) : on
+        # mémorise sur la page le dossier de travail qui l'a produite.
+        try:
+            setattr(page, PAGE_WORK_DIR_ATTR, str(Path(result_path).parent))
+        except (AttributeError, TypeError):  # pragma: no cover - défensif
+            logger.debug("impossible de mémoriser le dossier de travail de la page")
         if task.status in (TaskStatus.RUNNING, TaskStatus.PAUSED):
             status = (
                 TaskStatus.PAUSED

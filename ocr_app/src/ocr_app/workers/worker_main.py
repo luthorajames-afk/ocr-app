@@ -9,10 +9,11 @@ annulation, progression par étape, sauvegarde page par page R6) mais
 délègue le traitement de chaque page au pipeline réel par mode :
 
 - mode ``simple``    : OCR réel Tesseract via ``core/pipeline.py`` (R8 : le
-  texte natif d'un PDF est utilisé sans rendu ni OCR) ;
-- modes ``medium`` et ``advanced`` : pages « placeholder » produites par les
-  workers squelettes (les vrais moteurs arriveront avec l'installation des
-  modules, R13) — la boucle protocole reste complète et fonctionnelle.
+  texte natif d'un PDF est utilisé sans OCR, segmenté en blocs réels) ;
+- mode ``advanced``  : Docling réel (``AdvancedWorker`` + ``DoclingEngine``)
+  dans le venv d'évaluation dédié (R1/R13) ;
+- mode ``medium``    : pages « placeholder » produites par le worker
+  squelette — la boucle protocole reste complète et fonctionnelle.
 
 Exécution (R2 : toujours en sous-processus) :
 
@@ -109,11 +110,11 @@ def _log(message: str) -> None:
 
 
 def _placeholder_text(mode: str, page_number: int) -> str:
-    """Texte des pages placeholder (modes dont le moteur n'est pas installé)."""
+    """Texte des pages placeholder (simulation sans ``--input`` uniquement)."""
     if mode == "advanced":
         return (
-            f"[page {page_number}] mode Avancé : moteur Docling non encore "
-            f"installé — placeholder (accents : éèàç)."
+            f"[page {page_number}] mode Avancé : simulation sans --input "
+            f"(Docling s'exécute dans le venv d'évaluation) — accents : éèàç."
         )
     if mode == "medium":
         return (
@@ -172,7 +173,7 @@ class WorkerMain:
     Deux sources de pages, selon les arguments CLI :
 
     - ``--input <pdf/jpg/png>`` : document réel traité par le pipeline du mode
-      (OCR vrai en Simple, placeholder en Moyen/Avancé) ;
+      (OCR vrai en Simple, Docling en Avancé, placeholder en Moyen) ;
     - sans ``--input`` : simulation de ``--pages N`` pages (protocole complet,
       pages placeholder), pour les tests de protocole sans document.
     """
@@ -261,6 +262,7 @@ class WorkerMain:
             + (f"langues {self.language}, " if self.language else "")
             + f"dossier de travail {self.work_dir}"
         )
+        self._prewarm_engine()
         self._reader.start()
 
         # Attente de la commande start, d'une annulation ou de la fin de stdin.
@@ -315,6 +317,29 @@ class WorkerMain:
         return 0
 
     # --- Lecture des commandes -------------------------------------------
+    def _prewarm_engine(self) -> None:
+        """Précharge les dépendances lourdes du mode dans le thread principal.
+
+        Mode Avancé uniquement : l'import de Docling (qui tire numpy et ses
+        DLL natives) doit avoir lieu AVANT le démarrage du lecteur de
+        commandes. Une fois qu'un thread est bloqué en lecture du tube
+        stdin, le chargement de l'extension C de numpy peut rester bloqué
+        indéfiniment (verrou du chargeur DLL Windows — voir la note de
+        ``core.advanced_engine.import_document_converter`` ; ``tesserocr``
+        n'est pas concerné). L'import reste paresseux (R1) : il n'a lieu que
+        pour le mode Avancé avec un document réel, et un échec n'est pas
+        fatal ici — le moteur produira l'erreur de protocole appropriée.
+        """
+        if self.mode != "advanced" or not self.input_path:
+            return
+        try:
+            from ocr_app.core.advanced_engine import import_document_converter
+
+            import_document_converter()
+            _log("Docling préchargé (thread principal)")
+        except ImportError as exc:
+            _log(f"mode Avancé : Docling indisponible au préchargement ({exc})")
+
     def _read_commands(self) -> None:
         try:
             for raw in sys.stdin:
@@ -638,11 +663,11 @@ def _configure_stdio() -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m ocr_app.workers.worker_main",
-        description=(
-            "Worker OCR par mode (protocole JSON stdin/stdout). "
-            "Mode simple : OCR réel Tesseract ; modes medium/advanced : "
-            "placeholder en attendant l'installation des modules."
-        ),
+    description=(
+        "Worker OCR par mode (protocole JSON stdin/stdout). "
+        "Mode simple : OCR réel Tesseract ; mode advanced : Docling (venv "
+        "d'évaluation) ; mode medium : placeholder (module non installé)."
+    ),
     )
     parser.add_argument(
         "--mode",

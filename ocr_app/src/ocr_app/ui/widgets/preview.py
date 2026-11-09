@@ -1,23 +1,36 @@
-"""Aperçu de la page : QGraphicsView, page placeholder et surcouches de blocs."""
+"""Aperçu de la page : image réelle du document + surcouches de blocs.
+
+Plan v1 : le worker écrit ``page_NNN.json`` ET ``page_NNN.png`` (rendu 300 DPI)
+dans le dossier de travail de la tâche. L'aperçu charge l'image comme fond
+réel de la page et pose les surcouches de blocs par-dessus, à l'échelle
+correcte : les bboxes des blocs sont en points PDF (1 pt = 1/72 po) et
+l'image est rendue à ``render_dpi``, d'où ``scale = px_image / largeur_pt``.
+En l'absence d'image (mode démo, anciens dossiers, échec d'écriture), repli
+sur le rendu vectoriel historique (placeholder ou blocs dessinés).
+"""
 
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
     QFontMetricsF,
+    QImageReader,
     QPainter,
     QPainterPath,
     QPen,
+    QPixmap,
     QTransform,
 )
 from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QGraphicsItem,
+    QGraphicsPixmapItem,
     QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
@@ -38,6 +51,14 @@ A4_W = 595.0
 PAGE_SCALE = PAGE_W / A4_W
 PAGE_H = 842.0 * PAGE_SCALE
 
+# Borne mémoire de l'aperçu (R7) : une image plus large que cela (scan très
+# haute résolution) est réduite avant affichage. A4 à 300 DPI = 2 481 px.
+_MAX_PREVIEW_PX = 3500
+
+# Attribut transient posé par ui/task_runner.py sur chaque page chargée
+# depuis un résultat : dossier de travail contenant page_NNN.png.
+_PAGE_WORK_DIR_ATTR = "work_dir"
+
 
 BLOCK_LABELS = {
     BlockType.TITLE: "titre",
@@ -49,6 +70,74 @@ BLOCK_LABELS = {
 }
 
 _NUMERIC_RE = re.compile(r"^[-+0-9  .,%€$]+$")
+
+
+def _page_image_path(page: Page, image_dir: Optional[str] = None) -> Optional[Path]:
+    """Chemin de ``page_NNN.png`` pour la page, si le dossier est connu.
+
+    Le dossier de travail voyage avec la page (attribut transient posé par
+    le ``TaskRunner``) ou est passé explicitement (``image_dir``, tests).
+    """
+    directory = image_dir or getattr(page, _PAGE_WORK_DIR_ATTR, None)
+    if not directory:
+        return None
+    return Path(str(directory)) / f"page_{page.number:03d}.png"
+
+
+def _load_page_pixmap(path: Optional[Path]) -> Optional[QPixmap]:
+    """Charge l'image de page, bornée en taille (None si indisponible)."""
+    pixmap, _point_scale = _load_page_background(path)
+    return pixmap
+
+
+def _load_page_background(path: Optional[Path]) -> Tuple[Optional[QPixmap], float]:
+    """Charge ``page_NNN.png`` et retourne ``(pixmap, échelle points→scène)``.
+
+    L'échelle des bboxes (points PDF) est dérivée du DPI enregistré dans le
+    PNG (métadonnée pHYs écrite par le pipeline) : la page mesure
+    ``largeur_px × 72 / dpi`` points, d'où ``scale = PAGE_W / largeur_pt``.
+    Le calcul utilise la largeur AVANT la réduction d'affichage
+    (``_MAX_PREVIEW_PX``) : le DPI décrit l'image d'origine. Ce calcul rend
+    les surcouches justes pour toute taille de page (paysage, Letter…),
+    pas seulement l'A4 portrait. Sans métadonnée fiable (30..2400 DPI),
+    repli sur ``PAGE_SCALE`` (hypothèse A4 historique).
+    """
+    if path is None:
+        return None, PAGE_SCALE
+    try:
+        if not path.is_file():
+            return None, PAGE_SCALE
+    except OSError:  # pragma: no cover - chemin illisible
+        return None, PAGE_SCALE
+    reader = QImageReader(str(path))
+    reader.setAutoTransform(True)
+    image = reader.read()
+    if image.isNull():
+        return None, PAGE_SCALE
+    dpm = image.dotsPerMeterX()
+    dpi = dpm * 0.0254 if dpm > 0 else 0.0
+    if 30.0 <= dpi <= 2400.0:
+        point_scale = PAGE_W * dpi / (float(image.width()) * 72.0)
+    else:
+        point_scale = PAGE_SCALE
+    if image.width() > _MAX_PREVIEW_PX:
+        scaled = image.scaledToWidth(
+            _MAX_PREVIEW_PX, Qt.TransformationMode.SmoothTransformation
+        )
+        if not scaled.isNull():
+            image = scaled
+    return QPixmap.fromImage(image), point_scale
+
+
+def block_scene_rect(block: Block, scale: float = PAGE_SCALE) -> QRectF:
+    """Rect scène d'un bloc : bbox points PDF (origine haut-gauche) → scène."""
+    x0, y0, x1, y1 = block.bbox
+    return QRectF(
+        x0 * scale,
+        y0 * scale,
+        max(0.0, (x1 - x0) * scale),
+        max(0.0, (y1 - y0) * scale),
+    )
 
 
 def _font(pixel_size: int, bold: bool = False) -> QFont:
@@ -191,14 +280,8 @@ class PageContentItem(QGraphicsItem):
                 )
 
     @staticmethod
-    def _block_rect(block: Block) -> QRectF:
-        x0, y0, x1, y1 = block.bbox
-        return QRectF(
-            x0 * PAGE_SCALE,
-            y0 * PAGE_SCALE,
-            max(0.0, (x1 - x0) * PAGE_SCALE),
-            max(0.0, (y1 - y0) * PAGE_SCALE),
-        )
+    def _block_rect(block: Block, scale: float = PAGE_SCALE) -> QRectF:
+        return block_scene_rect(block, scale)
 
     def _paint_table(
         self, painter: QPainter, table: Optional[Table], rect: QRectF
@@ -407,15 +490,15 @@ class PreviewView(QGraphicsView):
         self.set_zoom(1.0, emit=False)
 
     # --- Contenu ----------------------------------------------------------
-    def _reset_scene(self) -> None:
+    def _reset_scene(self, page_h: float = PAGE_H) -> None:
         self._scene.clear()
         self._overlays = []
         self._scene.setSceneRect(
-            QRectF(-20, -20, PAGE_W + 40, PAGE_H + 40)
+            QRectF(-20, -20, PAGE_W + 40, page_h + 40)
         )
 
-    def _add_page_item(self) -> None:
-        page_item = QGraphicsRectItem(0, 0, PAGE_W, PAGE_H)
+    def _add_page_item(self, page_h: float = PAGE_H) -> None:
+        page_item = QGraphicsRectItem(0, 0, PAGE_W, page_h)
         page_item.setZValue(0)
         page_item.setPen(QPen(QColor(theme.BORDER), 1))
         page_item.setBrush(QColor(theme.PAPER))
@@ -449,13 +532,58 @@ class PreviewView(QGraphicsView):
             self._overlays.append(overlay)
         self._placeholder = True
 
-    def show_page(self, page: Page) -> None:
-        self._reset_scene()
-        self._add_page_item()
-        self._scene.addItem(PageContentItem(page, placeholder=False))
+    def show_page(self, page: Page, image_dir: Optional[str] = None) -> None:
+        """Affiche une page : image réelle en fond si disponible, sinon dessin.
+
+        ``image_dir`` (optionnel) est le dossier de travail contenant
+        ``page_NNN.png`` ; à défaut, l'attribut transient posé par le
+        ``TaskRunner`` sur la page est utilisé. Sans image (mode démo,
+        anciens dossiers, échec d'écriture), repli sur le rendu vectoriel
+        des blocs (comportement historique).
+
+        Échelle : deux espaces distincts, à ne pas confondre —
+
+        - les **blocs** ont leur bbox en points PDF (origine haut-gauche).
+        Leur échelle vers la scène (``PAGE_W`` de large) est dérivée du DPI
+        enregistré dans ``page_NNN.png`` (cf. ``_load_page_background``) :
+        juste pour toute taille de page (paysage, Letter…), avec repli
+        ``PAGE_SCALE`` (A4 portrait) si le DPI est absent ;
+        - l'**image** occupe le même rect de page : son échelle propre est
+        ``PAGE_W / largeur_px_image`` (px scène par px image), utilisée
+        uniquement par l'item pixmap de fond.
+
+        Appliquer l'échelle image aux bboxes en points comprimerait les
+        surcouches d'un facteur ``dpi/72`` (300/72 ≈ 4,2) dans le coin
+        haut-gauche.
+        """
+        pixmap, point_scale = _load_page_background(
+            _page_image_path(page, image_dir)
+        )
+        if pixmap is not None and pixmap.width() > 0:
+            image_scale = PAGE_W / float(pixmap.width())
+            page_h = float(pixmap.height()) * image_scale
+        else:
+            pixmap = None
+            point_scale = PAGE_SCALE
+            page_h = PAGE_H
+
+        self._reset_scene(page_h)
+        self._add_page_item(page_h)
+        if pixmap is not None:
+            background = QGraphicsPixmapItem(pixmap)
+            background.setPos(0.0, 0.0)
+            background.setScale(image_scale)
+            background.setTransformationMode(
+                Qt.TransformationMode.SmoothTransformation
+            )
+            background.setZValue(0.5)
+            self._scene.addItem(background)
+        else:
+            # Sans fond réel : les blocs sont dessinés (texte) sur la page.
+            self._scene.addItem(PageContentItem(page, placeholder=False))
 
         for index, block in enumerate(page.blocks):
-            rect = PageContentItem._block_rect(block)
+            rect = PageContentItem._block_rect(block, point_scale)
             if rect.width() <= 0 or rect.height() <= 0:
                 continue
             type_label = BLOCK_LABELS.get(block.type, block.type.value)
@@ -640,8 +768,9 @@ class PreviewPanel(QWidget):
         self.set_title_info(title, info)
         self.view.show_placeholder()
 
-    def show_page(self, page: Page) -> None:
-        self.view.show_page(page)
+    def show_page(self, page: Page, image_dir: Optional[str] = None) -> None:
+        """Affiche la page (image réelle en fond si disponible, cf. vue)."""
+        self.view.show_page(page, image_dir=image_dir)
 
     def select_block(self, index: int, emit: bool = False) -> bool:
         """Sélectionne la surcouche du bloc donné et la rend visible."""

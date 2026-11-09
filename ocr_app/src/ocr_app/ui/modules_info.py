@@ -133,12 +133,34 @@ def find_installed_module(
 
 
 def detect_modules(modules_dir: Optional[str] = None) -> List[ModuleInfo]:
-    """État des modules : import détecté OU manifeste registre valide."""
+    """État des modules : import détecté, venv d'évaluation OU manifeste."""
     import_installed = {
         "core": _has_module("tesserocr") or _has_module("pytesseract"),
         "medium": _has_module("rapidocr") or _has_module("rapidocr_onnxruntime"),
         "advanced": _has_module("docling"),
     }
+
+    # Venv d'évaluation du mode Avancé (R1/R13) : Docling vit dans
+    # .venv-eval-advanced, jamais dans l'interpréteur de l'interface (R2).
+    # Artefact ambiant de développement : consulté seulement en résolution
+    # non scopée (modules_dir is None), comme dans ui.worker_commands.
+    # Import paresseux : worker_commands importe modules_info (sens inverse),
+    # l'import ne doit donc pas créer de cycle au chargement des modules.
+    advanced_venv_detail: Optional[str] = None
+    if modules_dir is None and not import_installed["advanced"]:
+        try:
+            from ocr_app.ui.worker_commands import (
+                ADVANCED_VENV_DIRNAME,
+                advanced_venv_command,
+            )
+
+            if advanced_venv_command() is not None:
+                advanced_venv_detail = (
+                    f"venv d'évaluation {ADVANCED_VENV_DIRNAME} "
+                    "(Docling, sous-processus worker)"
+                )
+        except Exception:  # pragma: no cover - import défensif
+            advanced_venv_detail = None
 
     infos: List[ModuleInfo] = []
     for key, label in _LABELS.items():
@@ -152,6 +174,9 @@ def detect_modules(modules_dir: Optional[str] = None) -> List[ModuleInfo]:
                     f"module.json v{manifest.version} "
                     f"(worker vérifié, {manifest.path})"
                 )
+        if not installed and key == "advanced" and advanced_venv_detail:
+            installed = True
+            detail = advanced_venv_detail
         infos.append(ModuleInfo(key=key, label=label, installed=installed, detail=detail))
     return infos
 
