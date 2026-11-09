@@ -141,13 +141,16 @@ class WorkerClient(QObject):
         stage_delay: float = 0.05,
         *,
         command: Optional[Sequence[str]] = None,
+        extra_args: Optional[Sequence[str]] = None,
     ) -> bool:
         """Lance le worker pour ``total_pages`` pages.
 
         ``command`` remplace (pour cet appel) la commande configurée sur le
         client. Les arguments de protocole (``--pages``, ``--work-dir``,
         ``--stage-delay``) sont ajoutés à la suite : un worker réel doit
-        accepter ces options, comme le worker factice.
+        accepter ces options, comme le worker factice. ``extra_args`` permet
+        d'ajouter des arguments propres au worker (ex. ``--input`` du document
+        pour ``worker_main``) ; ils sont passés en dernier.
         """
         if self.is_running:
             return False
@@ -190,6 +193,9 @@ class WorkerClient(QObject):
             "--stage-delay",
             f"{max(0.0, float(stage_delay)):g}",
         ]
+        extra = tuple(str(arg) for arg in (extra_args or ()))
+        if extra:
+            arguments.extend(extra)
         logger.debug("lancement du worker : %s %s", prefix[0], arguments)
         self._process.start(prefix[0], arguments)
         return True

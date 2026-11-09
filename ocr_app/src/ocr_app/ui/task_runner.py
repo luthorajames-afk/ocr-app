@@ -17,6 +17,7 @@ from ocr_app.core.data_model import Document, Page
 from ocr_app.core.task_queue import Task, TaskQueue, TaskStatus
 from ocr_app.ui import file_utils
 from ocr_app.ui.worker_client import WorkerClient
+from ocr_app.ui.worker_commands import accepts_input_document
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +36,17 @@ class TaskRunner(QObject):
         parent: Optional[QObject] = None,
         *,
         worker_commands: Optional[Mapping[str, Sequence[str]]] = None,
+        unavailable_modes: Optional[Mapping[str, str]] = None,
     ) -> None:
         """``worker_commands`` associe un mode (simple/medium/advanced) à la
         commande du worker réel. Sans entrée, le worker factice de
         développement (``fake_worker``) est utilisé pour tous les modes : le
         protocole, la pause et l'annulation restent ainsi testables avant le
         branchement des moteurs réels.
+
+        ``unavailable_modes`` associe un mode à un message d'indisponibilité
+        (« module non installé », cf. ``worker_commands.resolve_worker_commands``) :
+        une tâche d'un tel mode passe en erreur sans lancer de worker.
         """
         super().__init__(parent)
         self._queue = TaskQueue()
@@ -63,6 +69,12 @@ class TaskRunner(QObject):
             parts = tuple(str(part) for part in command)
             if parts:
                 self._worker_commands[str(mode)] = parts
+
+        self._unavailable_modes: Dict[str, str] = {
+            str(mode): str(message)
+            for mode, message in (unavailable_modes or {}).items()
+            if str(message)
+        }
 
         self._pending: List[str] = []
         self._pages: Dict[str, Dict[int, Page]] = {}
@@ -145,6 +157,24 @@ class TaskRunner(QObject):
             if task is None or task.status != TaskStatus.PENDING:
                 continue
 
+            command = self._worker_commands.get(task.mode)
+            # Mode dont le module n'est pas installé : message clair, aucun
+            # worker lancé (la tâche reste en erreur consultable).
+            if command is None:
+                unavailable = self._unavailable_modes.get(task.mode)
+                if unavailable:
+                    self._queue.update_progress(
+                        task_id,
+                        status=TaskStatus.ERROR,
+                        error_message=unavailable,
+                    )
+                    self.error_occurred.emit(task_id, unavailable)
+                    continue
+                # Sans message d'indisponibilité : repli historique sur le
+                # worker factice de développement (command=None), qui conserve
+                # le protocole, la pause et l'annulation testables. Ne jamais
+                # laisser la tâche en PENDING (elle serait perdue de la file).
+
             try:
                 work_dir = file_utils.task_work_dir(
                     self._root(), task.source_path, task.id
@@ -174,10 +204,21 @@ class TaskRunner(QObject):
                 total_pages=total,
             )
 
+            # worker_main traite le document réel : lui passer --input.
+            # (fake_worker, qui n'a pas cette option, reste utilisable tel quel.)
+            extra_args: tuple[str, ...] = ()
+            if (
+                accepts_input_document(command)
+                and task.source_path
+                and Path(task.source_path).is_file()
+            ):
+                extra_args = ("--input", task.source_path)
+
             if not self._worker.start(
                 total,
                 work_dir,
-                command=self._worker_commands.get(task.mode),
+                command=command,
+                extra_args=extra_args,
             ):
                 message = "un worker est déjà en cours"
                 self._queue.update_progress(

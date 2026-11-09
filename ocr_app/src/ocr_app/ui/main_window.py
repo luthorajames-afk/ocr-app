@@ -58,6 +58,7 @@ from ocr_app.ui.icons import app_icon
 from ocr_app.ui.modules_info import demo_modules, detect_modules
 from ocr_app.ui.task_format import mode_label
 from ocr_app.ui.task_runner import TaskRunner
+from ocr_app.ui.worker_commands import resolve_worker_commands
 from ocr_app.ui.widgets.file_sidebar import FileSidebar
 from ocr_app.ui.widgets.preview import PreviewPanel
 from ocr_app.ui.widgets.results_panel import ResultsPanel
@@ -87,7 +88,14 @@ class MainWindow(QMainWindow):
         self._selected_id: Optional[str] = None
         self._demo_active = False
 
-        self._runner = TaskRunner(self)
+        # Phase 7 : workers réels par mode (worker_main) quand le module du
+        # mode est installé ; message clair « module non installé » sinon.
+        commands, unavailable_modes = resolve_worker_commands()
+        self._runner = TaskRunner(
+            self,
+            worker_commands=commands,
+            unavailable_modes=unavailable_modes,
+        )
         self._edit_session = EditSession(self)
         self._build_ui()
         self._connect_signals()
