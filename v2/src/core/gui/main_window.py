@@ -473,6 +473,9 @@ class MainWindow(QMainWindow):
             self._modes[key] = button
         self._update_mode_availability()
         add = QPushButton("Fichiers", bar)
+        self.theme_btn = QPushButton("Sombre", bar)
+        self.theme_btn.setCheckable(True)
+        self.theme_btn.clicked.connect(self._toggle_theme)
         calibrate = QPushButton("Étalonnage…", bar)
         calibrate.clicked.connect(self._open_calibration)
         add.clicked.connect(self._pick_files)
@@ -483,6 +486,7 @@ class MainWindow(QMainWindow):
         info.setObjectName("Muted")
         layout.addWidget(group)
         layout.addWidget(add)
+        layout.addWidget(self.theme_btn)
         self.calibrate_btn = calibrate
         layout.addWidget(calibrate)
         layout.addWidget(scan)
@@ -656,6 +660,19 @@ class MainWindow(QMainWindow):
                 continue
         if records:
             put_on_clipboard(document_payload(records))
+
+    def _toggle_theme(self) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        dark = self.theme_btn.isChecked()
+        self.theme_btn.setText("Clair" if dark else "Sombre")
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            theme.apply_theme(app, dark=dark)
+        # Rafraîchir les cartes (styles inline recalculés avec la palette).
+        for task in self._runner.tasks():
+            self.sidebar.upsert(task)
+        self.update()
 
     def _open_calibration(self) -> None:
         from core.gui.calibration_dialog import CalibrationDialog

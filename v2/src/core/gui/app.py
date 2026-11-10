@@ -16,6 +16,7 @@ def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv if argv is None else argv)
     parser = argparse.ArgumentParser(prog="aocri-gui", description=f"{APP_NAME} v2")
     parser.add_argument("--file", action="append", default=[], help="document à ajouter")
+    parser.add_argument("--dark", action="store_true", help="thème sombre")
     args, qt_args = parser.parse_known_args(arguments[1:])
 
     existing = QApplication.instance()
@@ -23,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName(APP_EDITOR)
-    apply_theme(app)
+    apply_theme(app, dark=bool(args.dark or __import__('os').environ.get('AOCRI_DARK') == '1'))
 
     window = MainWindow()
     for path in args.file:

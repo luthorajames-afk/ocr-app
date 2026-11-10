@@ -85,6 +85,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - IHM aux couleurs de la planche validée : cartes de tâche avec nom, badge
   de statut coloré, barre de progression **sous le nom**, étape et compteur ;
   feuille de style complétée (panneaux, splitter, barre d'état, onglets).
+- Thème sombre : palette complète (fond #17181c, panneaux #24262c, accent
+  #7d98ff, statuts adaptés), bascule « Sombre/Clair » dans la barre d'outils
+  et option `--dark` / `AOCRI_DARK=1` ; 2 tests.
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 
