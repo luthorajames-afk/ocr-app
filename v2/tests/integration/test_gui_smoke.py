@@ -100,11 +100,21 @@ def test_multi_page_navigation_zoom_and_detach(window, qtbot) -> None:
     assert window.preview.view.transform().m11() > scale_before
     window.preview.fit_btn.click()
 
+    # Replier / Déplier le panneau résultat (plus d'espace pour l'original).
+    sizes_before = window.preview.body.sizes()
+    window.preview.collapse_btn.click()
+    assert window.preview.compare.isVisible() is False
+    assert window.preview.collapse_btn.text() == "Déplier"
+    window.preview.collapse_btn.click()
+    assert window.preview.compare.isVisible() is True
+    assert window.preview.collapse_btn.text() == "Replier"
+    assert window.preview.body.sizes() == sizes_before
+
     window.preview.detach_btn.click()
     assert window.preview._detached is not None
     assert window.preview._detached.parent() is None  # fenêtre autonome
     assert window.preview.compare.isVisible() is False  # l'original remplit l'espace
-    assert window.preview.compare_btn.isEnabled() is False
+    assert window.preview.collapse_btn.isEnabled() is False
     assert window.preview._detached.browser.toPlainText().strip()
 
     # Déplacement libre (autre écran) : la fenêtre est de premier niveau.

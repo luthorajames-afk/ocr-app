@@ -178,7 +178,7 @@ class PreviewPanel(QWidget):
         self.zoom_out_btn = QPushButton("−", self)
         self.zoom_in_btn = QPushButton("+", self)
         self.fit_btn = QPushButton("Ajuster", self)
-        self.compare_btn = QPushButton("Comparer", self)
+        self.collapse_btn = QPushButton("Replier", self)
         self.detach_btn = QPushButton("Détacher", self)
         for button in (self.prev_btn, self.next_btn, self.zoom_out_btn, self.zoom_in_btn):
             button.setFixedWidth(30)
@@ -196,20 +196,20 @@ class PreviewPanel(QWidget):
         head.addWidget(self.zoom_in_btn)
         head.addWidget(self.fit_btn)
         head.addSpacing(10)
-        head.addWidget(self.compare_btn)
+        head.addWidget(self.collapse_btn)
         head.addWidget(self.detach_btn)
         self.compare = QTextBrowser(self)
         self.compare.setOpenExternalLinks(False)
-        body = QSplitter(Qt.Orientation.Horizontal, self)
-        body.addWidget(self.view)
-        body.addWidget(self.compare)
-        body.setSizes([600, 400])
+        self.body = QSplitter(Qt.Orientation.Horizontal, self)
+        self.body.addWidget(self.view)
+        self.body.addWidget(self.compare)
+        self.body.setSizes([600, 400])
         layout = QVBoxLayout(self)
         layout.addLayout(head)
-        layout.addWidget(body, 1)
-        self.compare_btn.setCheckable(True)
-        self.compare_btn.setChecked(True)
-        self.compare_btn.toggled.connect(self.compare.setVisible)
+        layout.addWidget(self.body, 1)
+        self._collapsed = False
+        self._expanded_sizes = [600, 400]
+        self.collapse_btn.clicked.connect(self.toggle_result_pane)
         self._page = 1
         self._total = 1
         self._html = "<p style='color:#68707d'>Résultat en attente…</p>"
@@ -286,7 +286,7 @@ class PreviewPanel(QWidget):
             self._detached = window
             # Le preview original occupe tout l'espace laissé vacant.
             self.compare.setVisible(False)
-            self.compare_btn.setEnabled(False)
+            self.collapse_btn.setEnabled(False)
             self.detach_btn.setText("Épingler")
         else:
             self._pinning = True
@@ -303,9 +303,25 @@ class PreviewPanel(QWidget):
         self._restore_inline_compare()
 
     def _restore_inline_compare(self) -> None:
-        self.compare_btn.setEnabled(True)
-        self.compare.setVisible(self.compare_btn.isChecked())
+        self.collapse_btn.setEnabled(True)
+        self.compare.setVisible(not self._collapsed)
         self.detach_btn.setText("Détacher")
+
+    def toggle_result_pane(self) -> None:
+        """Replie/déplie le panneau de résultat pour agrandir l'original."""
+        if self._detached is not None:
+            return
+        if not self._collapsed:
+            self._expanded_sizes = self.body.sizes()
+            self.compare.setVisible(False)
+            self._collapsed = True
+            self.collapse_btn.setText("Déplier")
+        else:
+            self.compare.setVisible(True)
+            self._collapsed = False
+            self.collapse_btn.setText("Replier")
+            self.body.setSizes(self._expanded_sizes)
+            self.fit_page()
 
 class ResultsPanel(QTabWidget):
     text_edited = Signal(str)
