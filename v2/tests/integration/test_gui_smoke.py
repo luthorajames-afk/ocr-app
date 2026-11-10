@@ -80,6 +80,19 @@ def test_worker_client_protocol_messages(qtbot, tmp_path) -> None:
     client.stop()
 
 
+def test_second_file_starts_after_first_completes(window, qtbot) -> None:
+    first = BY_ID["fact_001"]
+    second = BY_ID["fact_002"]
+    assert window.add_file(str(DATA / first["document"]))
+    assert window.add_file(str(DATA / second["document"]))  # en file d'attente
+    tasks = window._runner.tasks()
+    assert len(tasks) == 2
+    qtbot.waitUntil(
+        lambda: all(task.status.value == "done" for task in tasks), timeout=180_000
+    )
+    assert tasks[0].pages_done == 1 and tasks[1].pages_done == 1
+
+
 def test_edit_text_persists_and_marks_dirty(window, qtbot) -> None:
     """R9 — édition avant copie : sauvegarde page + marqueur « ● »."""
     entry = BY_ID["fact_001"]

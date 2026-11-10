@@ -369,7 +369,16 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title + " ●")
 
     def _on_all_done(self) -> None:
+        # Enchaînement des tâches en attente (ajout multi-fichiers) : différé
+        # pour laisser le processus précédent se terminer proprement.
+        QTimer.singleShot(150, self._start_next_pending)
         self._update_buttons()
+
+    def _start_next_pending(self) -> None:
+        for task in self._runner.tasks():
+            if task.status == TaskStatus.PENDING:
+                self._runner.start(task.id)
+                break
 
     def _on_task_clicked(self, item: QListWidgetItem) -> None:
         task = self._runner.task(str(item.data(Qt.ItemDataRole.UserRole)))

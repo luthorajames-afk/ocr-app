@@ -73,6 +73,9 @@ class WorkerClient(QObject):
     ) -> bool:
         if self._running:
             return False
+        if self._process.state() != QProcess.ProcessState.NotRunning:
+            self._process.terminate()
+            self._process.waitForFinished(2000)
         self._buffer = ""
         program = medium_python() if mode == "medium" else sys.executable
         arguments = [
