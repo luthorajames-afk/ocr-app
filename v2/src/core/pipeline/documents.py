@@ -51,6 +51,103 @@ def normalize_text(raw: str) -> str:
     return "\n".join(compressed).strip()
 
 
+def _text_layer_words(
+    textpage: pdfium.PdfTextPage,
+) -> list[tuple[float, float, float, float, str]]:
+    """Reconstruit les mots depuis les caractères (texte + géométrie exacte).
+
+    La couche texte de certains PDF scannés corrompt ``get_text_bounded`` avec
+    des marqueurs parasites (« achieving t the ») et des rectangles
+    multi-lignes. Les caractères, eux, sont fiables : on regroupe par ligne
+    (baseline) puis en mots (écart horizontal).
+    """
+    chars: list[tuple[float, float, float, float, str]] = []
+    count = textpage.count_chars()
+    for index in range(count):
+        left, bottom, right, top = textpage.get_charbox(index)
+        char = textpage.get_text_range(index, 1)
+        if not char or ord(char[0]) < 32 or char == chr(0xFFFD):
+            continue
+        chars.append((float(left), float(bottom), float(right), float(top), char))
+    if not chars:
+        return []
+
+    heights = sorted(char[3] - char[1] for char in chars)
+    median_height = heights[len(heights) // 2] if heights else 0.0
+    if median_height > 0:
+        # Filigranes pivotés : glyphes énormes (57-90 pt), jamais du texte.
+        limit = max(30.0, median_height * 3.0)
+        chars = [char for char in chars if (char[3] - char[1]) <= limit]
+    if not chars:
+        return []
+
+    # Lignes : la baseline (bottom) est stable, contrairement au centre.
+    # Ancrer sur la baseline MAX du groupe (les jambages descendent plus bas)
+    # évite qu'une ligne se fragmente en pseudo-lignes.
+    chars.sort(key=lambda char: (-char[1], char[0]))
+    lines: list[tuple[float, list[tuple[float, float, float, float, str]]]] = []
+    for char in chars:
+        if lines and lines[-1][0] - char[1] <= 6.5:
+            baseline, items = lines[-1]
+            lines[-1] = (max(baseline, char[1]), items + [char])
+        else:
+            lines.append((char[1], [char]))
+
+    words: list[tuple[float, float, float, float, str]] = []
+    for _baseline, items in lines:
+        if len(items) == 1 and median_height > 0 and items[0][4].strip():
+            height = items[0][3] - items[0][1]
+            # Marqueur superscript isolé : hors flux.
+            if height < median_height * 0.7:
+                continue
+        items.sort(key=lambda char: char[0])
+        # Seuil de coupure de mot propre à la ligne : le texte en petites
+        # capitales espacées (titres) a des écarts inter-lettres plus larges
+        # que les espaces de mots d'un paragraphe.
+        gaps = [
+            items[index + 1][0] - items[index][2]
+            for index in range(len(items) - 1)
+            if not items[index][4].isspace() and not items[index + 1][4].isspace()
+        ]
+        # Ne garder que les écarts intra-mot : les grands blancs de colonnes
+        # ne doivent pas gonfler le seuil.
+        gaps = sorted(gap for gap in gaps if 0.0 < gap <= 3.0)
+        if gaps:
+            word_gap = min(6.0, max(2.2, gaps[len(gaps) // 2] * 2.2))
+        else:
+            word_gap = 2.2
+        groups: list[list[tuple[float, float, float, float, str]]] = []
+        group: list[tuple[float, float, float, float, str]] = []
+        previous_right: float | None = None
+        for char in items:
+            if char[4].isspace():
+                if group:
+                    groups.append(group)
+                    group = []
+                previous_right = None
+                continue
+            if group and previous_right is not None and char[0] - previous_right > word_gap:
+                groups.append(group)
+                group = []
+            group.append(char)
+            previous_right = char[2]
+        if group:
+            groups.append(group)
+        for group in groups:
+            text = "".join(char[4] for char in group).strip()
+            if text:
+                words.append(
+                    (
+                        min(char[0] for char in group),
+                        min(char[1] for char in group),
+                        max(char[2] for char in group),
+                        max(char[3] for char in group),
+                        text,
+                    )
+                )
+    return words
+
+
 def _native_blocks(page: pdfium.PdfPage, page_height: float) -> list[OcrBlock]:
     """Segmente la couche texte d'un PDF natif en blocs ordonnés (multi-colonnes).
 
@@ -58,31 +155,13 @@ def _native_blocks(page: pdfium.PdfPage, page_height: float) -> list[OcrBlock]:
     bas-gauche) ; la bbox retournée est en points, origine haut-gauche.
     """
     textpage = page.get_textpage()
-    rects: list[tuple[float, float, float, float, str]] = []
     try:
-        count = textpage.count_rects()
-        for index in range(count):
-            left, bottom, right, top = textpage.get_rect(index)
-            text = (textpage.get_text_bounded(left, bottom, right, top) or "").strip()
-            if text:
-                rects.append((float(left), float(bottom), float(right), float(top), text))
+        rects = _text_layer_words(textpage)
     except Exception:  # noqa: BLE001 — PDF sans géométrie exploitable
         return []
 
     if not rects:
         return []
-
-    # Colonnes : regroupement des bords gauches proches (< 40 pt).
-    columns: list[tuple[float, list[tuple[float, float, float, float, str]]]] = []
-    for rect in sorted(rects, key=lambda item: item[0]):
-        left = rect[0]
-        for index, (column_left, column_rects) in enumerate(columns):
-            if abs(left - column_left) < 40.0:
-                column_rects.append(rect)
-                break
-        else:
-            columns.append((left, [rect]))
-    columns.sort(key=lambda column: column[0])
 
     # Hauteur médiane des lignes pour repérer les titres.
     heights = sorted(rect[3] - rect[1] for rect in rects)
@@ -132,20 +211,35 @@ def _native_tables_and_columns(
     if pending_rows:
         _flush_table(table_groups, pending_rows, pending_cells, line_rects)
 
-    blocks: list[OcrBlock] = []
-    for _column_left, column_rects in _cluster_columns(line_rects):
-        for row in _group_rows(column_rects):
-            for left, bottom, right, top, text in row:
-                height = top - bottom
-                is_title = height >= median_height * 1.3 and len(text) <= 90
-                blocks.append(
-                    OcrBlock(
-                        text=normalize_text(text).replace(chr(10), " "),
-                        bbox=(left, page_height - top, right, page_height - bottom),
-                        confidence=1.0,
-                        kind="title" if is_title else "line",
-                    )
-                )
+    # Lignes physiques : regroupement global par y, AVANT tout découpage en
+    # colonnes. Sinon une même ligne visuelle (« REPUBLIC OF … ») est éclatée
+    # en un bloc par colonne x.
+    all_rows = _group_rows(line_rects)
+    word_gap = _median_word_gap(all_rows)
+    cell_gap = max(10.0, word_gap * 2.5)
+    columns = _cluster_columns(line_rects)
+    # Multi-colonnes seulement si au moins 2 colonnes substantielles ; sinon
+    # ordre ligne par ligne (documents juridiques à une colonne + tableaux).
+    substantial = [rects for _left, rects in columns if len(rects) >= 5]
+    use_columns = (
+        2 <= len(substantial) <= 4
+        and len(line_rects) >= 60
+        and any(len(column_rects) >= 15 for _left, column_rects in columns)
+    )
+    if use_columns:
+        blocks = []
+        for _column_left, column_rects in columns:
+            for row in _group_rows(column_rects):
+                row_block = _row_block(row, page_height, median_height, cell_gap)
+                if row_block is not None:
+                    blocks.append(row_block)
+    else:
+        blocks = []
+        for row in all_rows:
+            row_block = _row_block(row, page_height, median_height, cell_gap)
+            if row_block is not None:
+                blocks.append(row_block)
+        blocks.sort(key=lambda block: (block.bbox[1], block.bbox[0]))
 
     for table_rows, table_cells in table_groups:
         table = _table_block(table_rows, table_cells, page_height)
@@ -155,6 +249,31 @@ def _native_tables_and_columns(
         )
         blocks.insert(position, table)
     return blocks
+
+
+def _row_block(
+    row: list[tuple[float, float, float, float, str]],
+    page_height: float,
+    median_height: float,
+    cell_gap: float,
+) -> OcrBlock | None:
+    """Une ligne de texte = un bloc (et non un bloc par mot)."""
+    merged = _merge_row_cells(row, cell_gap)
+    text = " ".join(cell[0] for cell in merged if cell[0].strip()).strip()
+    if not text or not any(char.isalnum() for char in text):
+        return None
+    left = min(rect[0] for rect in row)
+    right = max(rect[2] for rect in row)
+    bottom = min(rect[1] for rect in row)
+    top = max(rect[3] for rect in row)
+    height = top - bottom
+    is_title = height >= median_height * 1.3 and len(text) <= 90
+    return OcrBlock(
+        text=text,
+        bbox=(left, page_height - top, right, page_height - bottom),
+        confidence=1.0,
+        kind="title" if is_title else "line",
+    )
 
 
 def _flush_table(
@@ -240,28 +359,47 @@ def _merge_row_cells(
     (mots espacés de ~3-6 pt) d'un tableau (colonnes séparées de 15-60 pt).
     """
     cells: list[tuple[str, float, float]] = []
+    heights = sorted(max(0.0, rect[3] - rect[1]) for rect in row)
+    median_height = heights[len(heights) // 2] if heights else 0.0
     for left, _bottom, right, _top, text in row:
         clean = normalize_text(text).replace(chr(10), " ").strip()
         if not clean:
             continue
-        if cells and left - cells[-1][2] <= cell_gap:
+        # Marqueur superscript isolé (a, p, s, c, m) : bruit de couche texte.
+        if (
+            len(clean) == 1
+            and clean.isalpha()
+            and median_height > 0
+            and (_top - _bottom) < median_height * 0.7
+        ):
+            continue
+        gap = left - cells[-1][2] if cells else 0.0
+        numeric_break = (
+            bool(cells)
+            and gap >= 6.0
+            and cells[-1][0][-1:].isdigit()
+            and clean[:1].isdigit()
+        )
+        if cells and gap <= cell_gap and not numeric_break:
             previous_text, previous_left, _previous_right = cells[-1]
-            cells[-1] = (f"{previous_text} {clean}".strip(), previous_left, right)
+            joined = _normalise_cell(f"{previous_text} {clean}".strip())
+            cells[-1] = (joined, previous_left, right)
         else:
             cells.append((_normalise_cell(clean), left, right))
     return cells
 
 
 def _normalise_cell(text: str) -> str:
-    """Recolle les codes numériques coupés (ex. « 15 4 » -> « 154 »)."""
+    """Recolle et regroupe les nombres coupés (ex. « 15 4 » -> « 154 »)."""
     compact = text.replace(" ", "")
-    if (
-        text.count(" ") <= 2
-        and compact.isdigit()
-        and len(compact) <= 6
-        and len(compact) < len(text.replace(" ", "")) + 10
-    ):
-        return compact
+    if compact.isdigit():
+        if len(compact) <= 6:
+            return compact
+        if len(compact) <= 15:
+            # Regroupement canonique par milliers : la couche texte coupe
+            # parfois « 1 431 018 100 » en « 143101 8 1 00 ».
+            grouped = f"{int(compact):,}".replace(",", " ")
+            return grouped
     return " ".join(text.split())
 
 
