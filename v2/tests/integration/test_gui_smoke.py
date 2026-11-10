@@ -41,9 +41,12 @@ def test_window_title_and_modes(window) -> None:
 
 
 def test_mode_selection_updates_state(window) -> None:
+    from core.gui.worker_client import advanced_available
+
     # Les modes optionnels sont grisés quand leur environnement manque.
-    assert not window._modes["advanced"].isEnabled()
-    assert not window._modes["approfondi"].isEnabled()
+    expected = advanced_available()
+    assert window._modes["advanced"].isEnabled() is expected
+    assert window._modes["approfondi"].isEnabled() is expected
     if window._modes["medium"].isEnabled():
         window._modes["medium"].click()
         assert window._mode == "medium"

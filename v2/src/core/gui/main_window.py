@@ -7,6 +7,7 @@ la progression, l'aperçu (image de page + surcouches) et les résultats.
 from __future__ import annotations
 
 import json
+from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -71,7 +72,9 @@ class TaskSidebar(QWidget):
 
 
 class PreviewPanel(QWidget):
-    """Aperçu : image réelle de page si disponible, sinon page blanche + texte."""
+    """Aperçu : page entière ajustée à la vue + navigation entre pages."""
+
+    page_requested = Signal(int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -82,13 +85,26 @@ class PreviewPanel(QWidget):
         self.title.setObjectName("Title")
         self.info = QLabel("")
         self.info.setObjectName("Muted")
+        self.prev_btn = QPushButton("‹", self)
+        self.next_btn = QPushButton("›", self)
+        self.prev_btn.setFixedWidth(30)
+        self.next_btn.setFixedWidth(30)
+        self.page_label = QLabel("", self)
+        self.page_label.setObjectName("Muted")
         head = QHBoxLayout()
         head.addWidget(self.title)
         head.addWidget(self.info)
         head.addStretch(1)
+        head.addWidget(self.prev_btn)
+        head.addWidget(self.page_label)
+        head.addWidget(self.next_btn)
         layout = QVBoxLayout(self)
         layout.addLayout(head)
         layout.addWidget(self.view, 1)
+        self._page = 1
+        self._total = 1
+        self.prev_btn.clicked.connect(lambda: self.page_requested.emit(self._page - 1))
+        self.next_btn.clicked.connect(lambda: self.page_requested.emit(self._page + 1))
         self.show_placeholder()
 
     def show_placeholder(self) -> None:
@@ -98,11 +114,20 @@ class PreviewPanel(QWidget):
 
     def show_page(self, task: Task, page_number: int) -> None:
         self.scene.clear()
+        self._page = page_number
+        self._total = max(1, task.total_pages or 1)
+        self.page_label.setText(f"page {self._page} / {self._total}")
+        self.prev_btn.setEnabled(self._page > 1)
+        self.next_btn.setEnabled(self._page < self._total)
         png = Path(task.work_dir) / f"page_{page_number:03d}.png"
         if png.is_file():
             pixmap = QPixmap(str(png))
             if not pixmap.isNull():
                 self.scene.addPixmap(pixmap)
+                self.scene.setSceneRect(self.scene.itemsBoundingRect())
+                self.view.fitInView(
+                    self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio
+                )
         else:
             data = Path(task.work_dir) / f"page_{page_number:03d}.json"
             text = ""
@@ -114,7 +139,7 @@ class PreviewPanel(QWidget):
             self.scene.addRect(0, 0, 430, 608, brush=Qt.GlobalColor.white)
             self.scene.addText((text or "[page en cours]")[:1500])
         self.title.setText(Path(task.source_path).name)
-        self.info.setText(f"page {page_number} / {task.total_pages or '?'}")
+        self.info.setText(f"{task.total_pages or '?'} page(s)")
 
 
 class ResultsPanel(QTabWidget):
@@ -140,10 +165,38 @@ class ResultsPanel(QTabWidget):
         text = str(record.get("text", ""))
         self.plain.setPlainText(text)
         self.markup.setPlainText(text)
-        paragraphs = "".join(
-            f"<p>{line}</p>" for line in text.splitlines() if line.strip()
-        )
-        self.rendered.setHtml(paragraphs or "<p>[page vide]</p>")
+        html_parts: list[str] = []
+        blocks = record.get("blocks")
+        if isinstance(blocks, list) and blocks:
+            current_column = None
+            for block in blocks:
+                if not isinstance(block, dict):
+                    continue
+                content = escape(str(block.get("text", "")))
+                if not content.strip():
+                    continue
+                kind = str(block.get("kind", "line"))
+                bbox = block.get("bbox") or [0, 0, 0, 0]
+                try:
+                    column = round(float(bbox[0]) / 40)
+                except (TypeError, ValueError, IndexError):
+                    column = 0
+                if column != current_column and current_column is not None:
+                    html_parts.append("</div>")
+                if current_column is None or column != current_column:
+                    html_parts.append("<div style='margin-bottom:10px'>")
+                    current_column = column
+                if kind == "title":
+                    html_parts.append(f"<h2 style='margin:6px 0'>{content}</h2>")
+                else:
+                    html_parts.append(f"<p style='margin:2px 0'>{content}</p>")
+            if current_column is not None:
+                html_parts.append("</div>")
+        else:
+            html_parts = [
+                f"<p>{escape(line)}</p>" for line in text.splitlines() if line.strip()
+            ]
+        self.rendered.setHtml("".join(html_parts) or "<p>[page vide]</p>")
         self._loading = False
 
     def _on_plain_changed(self) -> None:
@@ -266,7 +319,7 @@ class MainWindow(QMainWindow):
 
     def _update_mode_availability(self) -> None:
         """Modes optionnels grisés si leur environnement n'est pas installé."""
-        from core.gui.worker_client import medium_available
+        from core.gui.worker_client import advanced_available, medium_available
 
         medium = self._modes.get("medium")
         if medium is not None:
@@ -277,11 +330,16 @@ class MainWindow(QMainWindow):
                 if available
                 else "Module Moyen non installé (venv .venv-eval-medium absent)"
             )
-        for key in ("advanced", "approfondi"):
+        advanced_ok = advanced_available()
+        for key, label in (("advanced", "Docling"), ("approfondi", "Docling + filtres")):
             button = self._modes.get(key)
             if button is not None:
-                button.setEnabled(False)
-                button.setToolTip("Module non installé (backend Docling requis)")
+                button.setEnabled(advanced_ok)
+                button.setToolTip(
+                    f"Module Avancé ({label}) dans son environnement dédié"
+                    if advanced_ok
+                    else "Module Avancé non installé (venv .venv-eval-advanced absent)"
+                )
 
     def _set_mode(self, mode: str) -> None:
         self._mode = mode

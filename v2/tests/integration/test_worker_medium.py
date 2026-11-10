@@ -108,7 +108,10 @@ def test_gui_medium_mode_enabled_when_venv_present(qtbot) -> None:
     QApplication.instance() or QApplication([])
     window = MainWindow()
     qtbot.addWidget(window)
+    from core.gui.worker_client import advanced_available
+
     assert window._modes["medium"].isEnabled()
-    assert not window._modes["advanced"].isEnabled()
-    assert not window._modes["approfondi"].isEnabled()
+    expected_advanced = advanced_available()
+    assert window._modes["advanced"].isEnabled() is expected_advanced
+    assert window._modes["approfondi"].isEnabled() is expected_advanced
     window.close()

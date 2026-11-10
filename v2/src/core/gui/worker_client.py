@@ -37,8 +37,29 @@ def medium_python() -> str:
     return sys.executable
 
 
+def advanced_python() -> str:
+    """Interpréteur du module Avancé (Docling) : venv dédié (R13)."""
+    override = os.environ.get("AOCRI_ADVANCED_VENV")
+    candidates: list[Path] = []
+    if override:
+        base = Path(override)
+        candidates.append(base / "Scripts" / "python.exe" if base.is_dir() else base)
+    root = Path(__file__).resolve().parents[3]
+    candidates.append(
+        root.parent / "ocr_app" / ".venv-eval-advanced" / "Scripts" / "python.exe"
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return sys.executable
+
+
 def medium_available() -> bool:
     return Path(medium_python()).resolve() != Path(sys.executable).resolve()
+
+
+def advanced_available() -> bool:
+    return Path(advanced_python()).resolve() != Path(sys.executable).resolve()
 
 
 class WorkerClient(QObject):
@@ -77,7 +98,12 @@ class WorkerClient(QObject):
             self._process.terminate()
             self._process.waitForFinished(2000)
         self._buffer = ""
-        program = medium_python() if mode == "medium" else sys.executable
+        if mode == "medium":
+            program = medium_python()
+        elif mode in ("advanced", "approfondi"):
+            program = advanced_python()
+        else:
+            program = sys.executable
         arguments = [
             "-u",
             "-m",

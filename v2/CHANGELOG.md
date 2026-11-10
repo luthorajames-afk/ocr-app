@@ -62,6 +62,14 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - T2.4/T2.5 branchés dans le worker : `--second-pass` et `--lexicon`
   (options opt-in) ; correctif TSV Tesseract (`GetTSVText(0)`) — les
   blocs par ligne et la confiance sont désormais réellement extraits.
+- Mode Avancé Docling branché dans l'IHM (`workers/advanced/engine.py`, venv
+  dédié via `AOCRI_ADVANCED_VENV`), préchargement du convertisseur contre le
+  deadlock du chargeur DLL ; boutons Avancé/Approfondi activés si le venv existe.
+- Aperçu : page entière ajustée à la vue (fitInView) + navigation ‹ › par page.
+- Mise en page : segmentation native en blocs (colonnes regroupées par x,
+  titres détectés par hauteur) ; onglet Rendu structuré (titres h2, colonnes).
+- Prétraitement automatique T2.3 appliqué avant l'OCR dans le worker
+  (deskew > 2°, binarisation opt-in).
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 

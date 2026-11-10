@@ -47,6 +47,10 @@ def build_engine(mode: str) -> OcrEngine:
         from workers.medium.engine import RapidOcrEngine
 
         return RapidOcrEngine()
+    if mode in ("advanced", "approfondi"):
+        from workers.advanced.engine import DoclingEngine
+
+        return DoclingEngine()
     from core.pipeline.tesseract_engine import TesseractEngine
 
     return TesseractEngine()
@@ -125,10 +129,26 @@ class Worker:
                     text = page.native_text
                     duration = 0.0
                     blocks: list[dict[str, object]] = []
-                    if not page.has_native_text:
+                    if page.has_native_text:
+                        # T1.3/T2.3 : blocs natifs segmentés (colonnes, titres).
+                        blocks = [
+                            {
+                                "text": block.text,
+                                "bbox": list(block.bbox),
+                                "confidence": block.confidence,
+                                "kind": block.kind,
+                            }
+                            for block in page.blocks
+                        ]
                         if not self._checkpoint(page.number, total, "ocr"):
                             break
-                        result = engine.process(page.image)
+                    else:
+                        if not self._checkpoint(page.number, total, "ocr"):
+                            break
+                        from core.pipeline.preprocess import preprocess
+
+                        prepared = preprocess(page.image)
+                        result = engine.process(prepared.image)
                         if self.second_pass and hasattr(engine, "process_region"):
                             from dataclasses import replace as dc_replace
 
@@ -153,9 +173,6 @@ class Worker:
                             }
                             for block in result.blocks
                         ]
-                    else:
-                        if not self._checkpoint(page.number, total, "ocr"):
-                            break
                     if not self._checkpoint(page.number, total, "reconstruct"):
                         break
                     record = PageRecord(
@@ -195,6 +212,13 @@ def _preload(mode: str) -> None:
 
     if mode == "medium":
         import rapidocr  # noqa: F401
+    if mode in ("advanced", "approfondi"):
+        # Précharger le convertisseur (sous-modules + DLL torch/docling) dans
+        # le thread principal : sinon blocage du chargeur pendant que le
+        # thread principal lit stdin (même classe de bug que v1).
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        from docling.document_converter import DocumentConverter  # noqa: F401
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -202,7 +226,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", required=True, help="PDF/JPG/PNG")
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--dpi", type=int, default=300)
-    parser.add_argument("--mode", choices=("simple", "medium"), default="simple")
+    parser.add_argument(
+        "--mode", choices=("simple", "medium", "advanced", "approfondi"), default="simple"
+    )
     parser.add_argument("--second-pass", action="store_true", help="re-OCR des lignes sous confiance")
     parser.add_argument("--lexicon", action="store_true", help="post-correction lexique (références intactes)")
     parser.add_argument("--no-resume", action="store_true", help="ignorer les pages déjà sauvegardées")
