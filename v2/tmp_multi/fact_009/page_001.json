@@ -1,0 +1,384 @@
+{
+  "schema_version": 1,
+  "page": 1,
+  "source": "tests\\data\\documents\\fact_009.pdf",
+  "engine": "tesseract",
+  "engine_version": "tesseract 5.5.3",
+  "duration_ms": 0.0,
+  "text": "SARL Dupont & Fils\nMatériel informatique et bureautique\n42 rue des Lilas ꞏ 75012 Paris\nTél. 01 43 27 65 18 — contact@dupont­fils.fr\nSIRET 812 345 678 00027 — TVA FR 32 812345678\nFACTURÉ À\nMme Élodie Marchand\n14 rue des Écoles\n75011 Paris\nelodie.marchand@example.fr\nTVA FR 12 445566778\nDésignation | Unité | Qté | P.U. HT | TVA | Montant HT\nWebcam Full HD | unité | 1 | 59,90 € | 20 % | 59,90 €\nFauteuil ergonomique | unité | 4 | 329,00 € | 5,5 % | 1 316,00 €\nPrestation de maintenance | heure | 1 | 90,00 € | 20 % | 90,00 €\nStation d'accueil USB­C | unité | 1 | 149,00 € | 5,5 % | 149,00 €\nSupport téléphone | unité | 2 | 19,90 € | 20 % | 39,80 €\nDisque SSD externe 1 To | unité | 4 | 119,00 € | 5,5 % | 476,00 €\nAbonnement revue mensuelle | mois | 2 | 8,90 € | 20 % | 17,80 €\nBureau assis­debout | unité | 2 | 549,00 € | 5,5 % | 1 098,00 €\nTableau blanc 120 × 90 cm | unité | 3 | 84,00 € | 20 % | 252,00 €\nInstallation et configuration | forfait | 10 | 120,00 € | 5,5 % | 1 200,00 €\nCasque audio antibruit | unité | 2 | 129,00 € | 20 % | 258,00 €\nLampe de bureau LED | unité | 12 | 39,90 € | 5,5 % | 478,80 €\nRamette papier A4 80 g | ramette | 1 | 5,40 € | 20 % | 5,40 €\nMultiprise parafoudre | unité | 4 | 24,90 € | 5,5 % | 99,60 €\nLe détail des articles se poursuit page suivante ; les totaux sont récapitulés en fin\nde document.\nSARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois\nfois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.\nFACTURE\nDate : 9 novembre 2026\nÉchéance : 9 décembre 2026\nN° FA­2026­0109\nPage 1 / 2",
+  "blocks": [
+    {
+      "text": "SARL Dupont & Fils",
+      "bbox": [
+        44.61000061035156,
+        25.322509765625,
+        162.16000366210938,
+        37.010009765625
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Matériel informatique et bureautique",
+      "bbox": [
+        44.73720169067383,
+        39.83575439453125,
+        168.63238525390625,
+        47.14434814453125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "42 rue des Lilas ꞏ 75012 Paris",
+      "bbox": [
+        44.26139831542969,
+        50.46600341796875,
+        147.41639709472656,
+        56.24578857421875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Tél. 01 43 27 65 18 — contact@dupont­fils.fr",
+      "bbox": [
+        44.33940124511719,
+        60.947998046875,
+        199.4813995361328,
+        68.35015869140625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "SIRET 812 345 678 00027 — TVA FR 32 812345678",
+      "bbox": [
+        44.51100158691406,
+        71.5157470703125,
+        227.95928955078125,
+        77.37359619140625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURÉ À",
+      "bbox": [
+        52.402400970458984,
+        105.830810546875,
+        95.68440246582031,
+        112.88360595703125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Mme Élodie Marchand",
+      "bbox": [
+        52.58549880981445,
+        114.21148681640625,
+        161.9324951171875,
+        123.9554443359375
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "14 rue des Écoles",
+      "bbox": [
+        52.75559997558594,
+        126.2760009765625,
+        118.71240234375,
+        134.01239013671875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "75011 Paris",
+      "bbox": [
+        52.234798431396484,
+        139.3079833984375,
+        96.3179931640625,
+        145.53240966796875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "elodie.marchand@example.fr",
+      "bbox": [
+        52.15079879760742,
+        150.74395751953125,
+        161.76239013671875,
+        158.715576171875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA FR 12 445566778",
+      "bbox": [
+        52.033199310302734,
+        162.34796142578125,
+        137.32679748535156,
+        168.5723876953125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Désignation | Unité | Qté | P.U. HT | TVA | Montant HT\nWebcam Full HD | unité | 1 | 59,90 € | 20 % | 59,90 €\nFauteuil ergonomique | unité | 4 | 329,00 € | 5,5 % | 1 316,00 €\nPrestation de maintenance | heure | 1 | 90,00 € | 20 % | 90,00 €\nStation d'accueil USB­C | unité | 1 | 149,00 € | 5,5 % | 149,00 €\nSupport téléphone | unité | 2 | 19,90 € | 20 % | 39,80 €\nDisque SSD externe 1 To | unité | 4 | 119,00 € | 5,5 % | 476,00 €\nAbonnement revue mensuelle | mois | 2 | 8,90 € | 20 % | 17,80 €\nBureau assis­debout | unité | 2 | 549,00 € | 5,5 % | 1 098,00 €\nTableau blanc 120 × 90 cm | unité | 3 | 84,00 € | 20 % | 252,00 €\nInstallation et configuration | forfait | 10 | 120,00 € | 5,5 % | 1 200,00 €\nCasque audio antibruit | unité | 2 | 129,00 € | 20 % | 258,00 €\nLampe de bureau LED | unité | 12 | 39,90 € | 5,5 % | 478,80 €\nRamette papier A4 80 g | ramette | 1 | 5,40 € | 20 % | 5,40 €\nMultiprise parafoudre | unité | 4 | 24,90 € | 5,5 % | 99,60 €",
+      "bbox": [
+        47.040000915527344,
+        181.7237548828125,
+        548.8823852539062,
+        371.8163757324219
+      ],
+      "confidence": 1.0,
+      "kind": "table",
+      "grid": [
+        [
+          "Désignation",
+          "Unité",
+          "Qté",
+          "P.U. HT",
+          "TVA",
+          "Montant HT"
+        ],
+        [
+          "Webcam Full HD",
+          "unité",
+          "1",
+          "59,90 €",
+          "20 %",
+          "59,90 €"
+        ],
+        [
+          "Fauteuil ergonomique",
+          "unité",
+          "4",
+          "329,00 €",
+          "5,5 %",
+          "1 316,00 €"
+        ],
+        [
+          "Prestation de maintenance",
+          "heure",
+          "1",
+          "90,00 €",
+          "20 %",
+          "90,00 €"
+        ],
+        [
+          "Station d'accueil USB­C",
+          "unité",
+          "1",
+          "149,00 €",
+          "5,5 %",
+          "149,00 €"
+        ],
+        [
+          "Support téléphone",
+          "unité",
+          "2",
+          "19,90 €",
+          "20 %",
+          "39,80 €"
+        ],
+        [
+          "Disque SSD externe 1 To",
+          "unité",
+          "4",
+          "119,00 €",
+          "5,5 %",
+          "476,00 €"
+        ],
+        [
+          "Abonnement revue mensuelle",
+          "mois",
+          "2",
+          "8,90 €",
+          "20 %",
+          "17,80 €"
+        ],
+        [
+          "Bureau assis­debout",
+          "unité",
+          "2",
+          "549,00 €",
+          "5,5 %",
+          "1 098,00 €"
+        ],
+        [
+          "Tableau blanc 120 × 90 cm",
+          "unité",
+          "3",
+          "84,00 €",
+          "20 %",
+          "252,00 €"
+        ],
+        [
+          "Installation et configuration",
+          "forfait",
+          "10",
+          "120,00 €",
+          "5,5 %",
+          "1 200,00 €"
+        ],
+        [
+          "Casque audio antibruit",
+          "unité",
+          "2",
+          "129,00 €",
+          "20 %",
+          "258,00 €"
+        ],
+        [
+          "Lampe de bureau LED",
+          "unité",
+          "12",
+          "39,90 €",
+          "5,5 %",
+          "478,80 €"
+        ],
+        [
+          "Ramette papier A4 80 g",
+          "ramette",
+          "1",
+          "5,40 €",
+          "20 %",
+          "5,40 €"
+        ],
+        [
+          "Multiprise parafoudre",
+          "unité",
+          "4",
+          "24,90 €",
+          "5,5 %",
+          "99,60 €"
+        ]
+      ]
+    },
+    {
+      "text": "Le détail des articles se poursuit page suivante ; les totaux sont récapitulés en fin",
+      "bbox": [
+        44.74399948120117,
+        384.8079833984375,
+        330.6720275878906,
+        392.3919677734375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "de document.",
+      "bbox": [
+        44.43199920654297,
+        395.4639587402344,
+        91.91999816894531,
+        401.36798095703125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "SARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois",
+      "bbox": [
+        44.447998046875,
+        792.070384979248,
+        507.0849609375,
+        798.0671844482422
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "fois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.",
+      "bbox": [
+        44.21759796142578,
+        800.7103843688965,
+        392.82568359375,
+        806.7775840759277
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURE",
+      "bbox": [
+        456.5350036621094,
+        23.13995361328125,
+        549.5549926757812,
+        38.13995361328125
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Date : 9 novembre 2026",
+      "bbox": [
+        465.7359924316406,
+        54.15997314453125,
+        550.5280151367188,
+        60.0880126953125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Échéance : 9 décembre 2026",
+      "bbox": [
+        447.031982421875,
+        62.7999267578125,
+        550.4879760742188,
+        70.16796875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "N° FA­2026­0109",
+      "bbox": [
+        489.7355041503906,
+        44.00799560546875,
+        551.0794677734375,
+        50.00799560546875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Page 1 / 2",
+      "bbox": [
+        520.3636474609375,
+        792.2547836303711,
+        550.4468383789062,
+        798.7011833190918
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    }
+  ]
+}

@@ -7,6 +7,7 @@ max, R7) et le texte natif éventuel (PDF non scanné, pypdfium2).
 from __future__ import annotations
 
 import unicodedata
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -211,8 +212,31 @@ def _render_pdf_page(page: pdfium.PdfPage, dpi: int) -> Image.Image:
     return image
 
 
-def load_document(path: str | Path, dpi: int = DEFAULT_DPI) -> list[DocumentPage]:
-    """Charge un PDF, JPG ou PNG en pages prêtes pour l'OCR."""
+def page_count(path: str | Path) -> int:
+    """Nombre de pages sans rendu (PDF : len ; image : 1)."""
+    source = Path(path)
+    if not source.is_file():
+        raise FileNotFoundError(f"document introuvable : {source}")
+    if source.suffix.lower() not in SUPPORTED_SUFFIXES:
+        raise ValueError(f"format non pris en charge : {source.suffix}")
+    if source.suffix.lower() != ".pdf":
+        return 1
+    document = pdfium.PdfDocument(str(source))
+    try:
+        return len(document)
+    finally:
+        document.close()
+
+
+def iter_document_pages(
+    path: str | Path, dpi: int = DEFAULT_DPI
+) -> Iterator[DocumentPage]:
+    """Itère les pages UNE PAR UNE (R7 : une seule page en mémoire).
+
+    Le générateur rend la page, la remet à l'appelant, puis libère son image
+    avant de passer à la suivante : un PDF de plusieurs centaines de pages ne
+    sature plus la mémoire.
+    """
     source = Path(path)
     if not source.is_file():
         raise FileNotFoundError(f"document introuvable : {source}")
@@ -223,9 +247,9 @@ def load_document(path: str | Path, dpi: int = DEFAULT_DPI) -> list[DocumentPage
     if source.suffix.lower() != ".pdf":
         with Image.open(source) as opened:
             image = opened.convert("RGB")
-        return [DocumentPage(number=1, image=image, native_text="")]
+        yield DocumentPage(number=1, image=image, native_text="")
+        return
 
-    pages: list[DocumentPage] = []
     pdf = pdfium.PdfDocument(str(source))
     try:
         for index in range(len(pdf)):
@@ -241,16 +265,18 @@ def load_document(path: str | Path, dpi: int = DEFAULT_DPI) -> list[DocumentPage
                     blocks = tuple(_native_blocks(page, page_height))
                 except Exception:  # noqa: BLE001 — PDF sans couche texte
                     native = ""
-                pages.append(
-                    DocumentPage(
-                        number=index + 1,
-                        image=image,
-                        native_text=native,
-                        blocks=blocks,
-                    )
+                yield DocumentPage(
+                    number=index + 1,
+                    image=image,
+                    native_text=native,
+                    blocks=blocks,
                 )
             finally:
                 page.close()
     finally:
         pdf.close()
-    return pages
+
+
+def load_document(path: str | Path, dpi: int = DEFAULT_DPI) -> list[DocumentPage]:
+    """Compatibilité (tests, outils) : matérialise toutes les pages."""
+    return list(iter_document_pages(path, dpi=dpi))

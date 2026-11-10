@@ -17,7 +17,7 @@ import threading
 import time
 from pathlib import Path
 
-from core.pipeline.documents import load_document
+from core.pipeline.documents import iter_document_pages, page_count
 from core.pipeline.interfaces import OcrEngine
 from core.pipeline.job_store import PageRecord, save_page, saved_pages
 from core.pipeline.protocol import (
@@ -70,6 +70,7 @@ class Worker:
     ) -> None:
         self.input_path = input_path
         self.work_dir = work_dir
+        self.work_dir.mkdir(parents=True, exist_ok=True)
         self.dpi = max(72, min(int(dpi), 300))
         self._resume_existing = resume_existing
         self.mode = mode
@@ -111,8 +112,9 @@ class Worker:
 
     def _process(self) -> None:
         try:
-            pages = load_document(self.input_path, dpi=self.dpi)
-            total = len(pages)
+            # R7 : rendu page par page, une seule image en mémoire.
+            total = page_count(self.input_path)
+            pages = iter_document_pages(self.input_path, dpi=self.dpi)
             already = saved_pages(self.work_dir) if self._resume_existing else set()
             engine = build_engine(self.mode)
             engine.initialize()

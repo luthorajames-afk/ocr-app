@@ -117,9 +117,14 @@ class TaskItemWidget(QWidget):
         muted = f"color: {theme.MUTED}; font-size: 10.5px;"
         self.stage.setStyleSheet(muted)
         self.percent.setStyleSheet(muted)
-        self.stage.setText(
-            f"page {task.current_page} / {total or '?'} · {task.stage or task.status.value}"
-        )
+        if task.status == TaskStatus.ERROR and task.error:
+            self.stage.setText(f"Erreur : {task.error[:90]}")
+            self.setToolTip(task.error)
+        else:
+            self.stage.setText(
+                f"page {task.current_page} / {total or '?'} · {task.stage or task.status.value}"
+            )
+            self.setToolTip("")
         self.percent.setText(
             f"{task.pages_done}/{total}" if total else ("100 %" if percent == 100 else "—")
         )
@@ -639,11 +644,14 @@ class MainWindow(QMainWindow):
             else:
                 percent = 0
             self.bottom.progress.setValue(percent)
-            self.bottom.label.setText(
-                f"Page {task.current_page}/{total or '?'} — {task.stage or task.status.value}"
-                if task.status == TaskStatus.RUNNING
-                else task.status.value
-            )
+            if task.status == TaskStatus.ERROR and task.error:
+                self.bottom.label.setText(f"Erreur : {task.error}")
+            else:
+                self.bottom.label.setText(
+                    f"Page {task.current_page}/{total or '?'} — {task.stage or task.status.value}"
+                    if task.status == TaskStatus.RUNNING
+                    else task.status.value
+                )
             self._last_page = task.pages_done or task.current_page
             if task.status == TaskStatus.RUNNING and task.stage:
                 self.preview.info.setText(f"page {task.current_page} / {total or '?'}")

@@ -120,6 +120,20 @@ def test_progress_and_page_done_with_saved_files(tmp_path: Path) -> None:
         driver.close()
 
 
+def test_worker_creates_missing_work_dir(tmp_path: Path) -> None:
+    """Le worker crée son dossier de travail s'il n'existe pas (multi-pages)."""
+    entry = BY_ID["fact_009"]
+    work = tmp_path / "nouveau dossier éàç" / "absent"
+    assert not work.exists()
+    driver = WorkerDriver(work, DATA / entry["document"])
+    try:
+        driver.send("start")
+        driver.wait_for(lambda m: m.get("type") == "page_done")
+        assert (work / "page_001.png").is_file()
+    finally:
+        driver.close()
+
+
 def test_pause_freezes_progress_then_resume(tmp_path: Path) -> None:
     entry = BY_ID["fact_001"]
     driver = WorkerDriver(tmp_path / "pause éàç", DATA / entry["document"])

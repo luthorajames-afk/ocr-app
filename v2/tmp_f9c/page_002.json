@@ -1,0 +1,392 @@
+{
+  "schema_version": 1,
+  "page": 2,
+  "source": "tests\\data\\documents\\fact_009.pdf",
+  "engine": "tesseract",
+  "engine_version": "tesseract 5.5.3",
+  "duration_ms": 0.0,
+  "text": "SARL Dupont & Fils\nMatériel informatique et bureautique\n42 rue des Lilas ꞏ 75012 Paris\nTél. 01 43 27 65 18 — contact@dupont­fils.fr\nSIRET 812 345 678 00027 — TVA FR 32 812345678\nSuite du détail des prestations\nDésignation | Unité | Qté | P.U. HT | TVA | Montant HT\nSouris ergonomique sans fil | unité | 6 | 34,50 € | 20 % | 207,00 €\nPochette de 100 chemises | lot | 10 | 18,60 € | 5,5 % | 186,00 €\nNettoyant écran | flacon | 12 | 8,50 € | 20 % | 102,00 €\nFormation bureautique | session | 4 | 450,00 € | 5,5 % | 1 800,00 €\nStylo bille bleu | unité | 6 | 1,20 € | 20 % | 7,20 €\nClavier mécanique AZERTY | unité | 1 | 79,90 € | 5,5 % | 79,90 €\nMODALITÉS DE RÈGLEMENT\nRèglement à 45 jours fin de mois. Virement bancaire sur le compte IBAN FR76 3000\n4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de\nfacture en référence.\nSARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois\nfois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.\nSous­total HT :\nTVA 5,5 % (base 6 883,30 €) :\nTVA 20 % (base 1 039,10 €) :\nTotal TTC :\nFACTURE — suite\nDate : 9 novembre 2026\nÉchéance : 9 décembre 2026\nN° FA­2026­0109\nPage 2 / 2\n7 922,40 €\n378,58 €\n207,82 €\n8 508,80 €\nPage 2 / 2",
+  "blocks": [
+    {
+      "text": "SARL Dupont & Fils",
+      "bbox": [
+        44.61000061035156,
+        25.322509765625,
+        162.16000366210938,
+        37.010009765625
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Matériel informatique et bureautique",
+      "bbox": [
+        44.73720169067383,
+        39.83575439453125,
+        168.63238525390625,
+        47.14434814453125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "42 rue des Lilas ꞏ 75012 Paris",
+      "bbox": [
+        44.26139831542969,
+        50.46600341796875,
+        147.41639709472656,
+        56.24578857421875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Tél. 01 43 27 65 18 — contact@dupont­fils.fr",
+      "bbox": [
+        44.33940124511719,
+        60.947998046875,
+        199.4813995361328,
+        68.35015869140625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "SIRET 812 345 678 00027 — TVA FR 32 812345678",
+      "bbox": [
+        44.51100158691406,
+        71.5157470703125,
+        227.95928955078125,
+        77.37359619140625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Suite du détail des prestations",
+      "bbox": [
+        44.52000045776367,
+        102.04998779296875,
+        188.54998779296875,
+        111.4000244140625
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Désignation | Unité | Qté | P.U. HT | TVA | Montant HT\nSouris ergonomique sans fil | unité | 6 | 34,50 € | 20 % | 207,00 €\nPochette de 100 chemises | lot | 10 | 18,60 € | 5,5 % | 186,00 €\nNettoyant écran | flacon | 12 | 8,50 € | 20 % | 102,00 €\nFormation bureautique | session | 4 | 450,00 € | 5,5 % | 1 800,00 €\nStylo bille bleu | unité | 6 | 1,20 € | 20 % | 7,20 €\nClavier mécanique AZERTY | unité | 1 | 79,90 € | 5,5 % | 79,90 €",
+      "bbox": [
+        47.3910026550293,
+        122.2037353515625,
+        548.8823852539062,
+        207.84832763671875
+      ],
+      "confidence": 1.0,
+      "kind": "table",
+      "grid": [
+        [
+          "Désignation",
+          "Unité",
+          "Qté",
+          "P.U. HT",
+          "TVA",
+          "Montant HT"
+        ],
+        [
+          "Souris ergonomique sans fil",
+          "unité",
+          "6",
+          "34,50 €",
+          "20 %",
+          "207,00 €"
+        ],
+        [
+          "Pochette de 100 chemises",
+          "lot",
+          "10",
+          "18,60 €",
+          "5,5 %",
+          "186,00 €"
+        ],
+        [
+          "Nettoyant écran",
+          "flacon",
+          "12",
+          "8,50 €",
+          "20 %",
+          "102,00 €"
+        ],
+        [
+          "Formation bureautique",
+          "session",
+          "4",
+          "450,00 €",
+          "5,5 %",
+          "1 800,00 €"
+        ],
+        [
+          "Stylo bille bleu",
+          "unité",
+          "6",
+          "1,20 €",
+          "20 %",
+          "7,20 €"
+        ],
+        [
+          "Clavier mécanique AZERTY",
+          "unité",
+          "1",
+          "79,90 €",
+          "5,5 %",
+          "79,90 €"
+        ]
+      ]
+    },
+    {
+      "text": "MODALITÉS DE RÈGLEMENT",
+      "bbox": [
+        44.7421989440918,
+        284.320556640625,
+        159.5913848876953,
+        291.9383544921875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Règlement à 45 jours fin de mois. Virement bancaire sur le compte IBAN FR76 3000",
+      "bbox": [
+        44.77619934082031,
+        295.19573974609375,
+        335.349609375,
+        302.59014892578125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de",
+      "bbox": [
+        44.26139831542969,
+        305.7557373046875,
+        332.3856201171875,
+        313.0643310546875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "facture en référence.",
+      "bbox": [
+        44.230201721191406,
+        316.31573486328125,
+        115.41299438476562,
+        322.165771484375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "SARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois",
+      "bbox": [
+        44.447998046875,
+        792.070384979248,
+        507.0849609375,
+        798.0671844482422
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "fois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.",
+      "bbox": [
+        44.21759796142578,
+        800.7103843688965,
+        392.82568359375,
+        806.7775840759277
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Sous­total HT :",
+      "bbox": [
+        331.5870056152344,
+        224.0445556640625,
+        387.7450256347656,
+        230.49456787109375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA 5,5 % (base 6 883,30 €) :",
+      "bbox": [
+        331.3978271484375,
+        235.0845947265625,
+        446.0272216796875,
+        243.2374267578125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA 20 % (base 1 039,10 €) :",
+      "bbox": [
+        331.3978271484375,
+        246.12457275390625,
+        443.64501953125,
+        254.27740478515625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Total TTC :",
+      "bbox": [
+        331.3890075683594,
+        257.3489990234375,
+        377.2530212402344,
+        264.0989990234375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURE — suite",
+      "bbox": [
+        377.81500244140625,
+        23.13995361328125,
+        548.7949829101562,
+        38.13995361328125
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Date : 9 novembre 2026",
+      "bbox": [
+        465.7359924316406,
+        54.15997314453125,
+        550.5280151367188,
+        60.0880126953125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Échéance : 9 décembre 2026",
+      "bbox": [
+        447.031982421875,
+        62.7999267578125,
+        550.4879760742188,
+        70.16796875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "N° FA­2026­0109",
+      "bbox": [
+        489.7355041503906,
+        44.00799560546875,
+        551.0794677734375,
+        50.00799560546875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Page 2 / 2",
+      "bbox": [
+        515.176025390625,
+        74.24798583984375,
+        550.5679931640625,
+        81.83197021484375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "7 922,40 €",
+      "bbox": [
+        504.88421630859375,
+        224.0445556640625,
+        544.9688110351562,
+        231.612548828125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "378,58 €",
+      "bbox": [
+        512.0411987304688,
+        235.0845947265625,
+        545.0050048828125,
+        242.652587890625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "207,82 €",
+      "bbox": [
+        511.92938232421875,
+        246.12457275390625,
+        545.0050048828125,
+        253.69256591796875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "8 508,80 €",
+      "bbox": [
+        501.4889831542969,
+        257.3489990234375,
+        543.3480224609375,
+        265.4310302734375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Page 2 / 2",
+      "bbox": [
+        520.3636474609375,
+        792.2547836303711,
+        550.4468383789062,
+        798.7011833190918
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    }
+  ]
+}
