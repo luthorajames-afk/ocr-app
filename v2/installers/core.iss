@@ -10,11 +10,14 @@ DefaultGroupName=AOCRI
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 UninstallDisplayIcon={app}\OCRApp.exe
+OutputDir=C:\Users\lutho\AppData\Local\Temp\aocri_setup_out
+OutputBaseFilename=Setup-AOCRI-v2.0-complet
+Compression=lzma2/max
+SolidCompression=yes
 
 [Files]
 Source: "..\dist\OCRApp\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\models\tessdata\*.traineddata"; DestDir: "{app}\models\tessdata"; Flags: ignoreversion
-Source: "..\dist\worker_simple\worker_simple\*"; DestDir: "{app}\workers\worker_simple"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Tasks]
 Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; GroupDescription: "Raccourcis:"

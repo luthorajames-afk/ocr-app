@@ -5,14 +5,15 @@
 AppId={{A0C21E5F-6001-4C3D-9E4F-8A0C4D5E1F2B}
 AppName=AOCRI
 AppVersion=2.0.0
-DefaultDirName={localappdata}\Programs\AOCRI\modules\medium
+DefaultDirName={localappdata}\Programs\AOCRI\workers\worker_medium
 DefaultGroupName=AOCRI
 PrivilegesRequired=lowest
 UsePreviousAppDir=no
 ArchitecturesAllowed=x64compatible
+OutputDir=C:\Users\lutho\AppData\Local\Temp\aocri_setup_out
+OutputBaseFilename=Setup-AOCRI-module-medium
+Compression=lzma2/max
+SolidCompression=yes
 
 [Files]
-Source: "..\dist\worker_medium\worker_medium\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-[Run]
-Filename: "{app}\module.json"; Description: "Manifeste du module Moyen"; Flags: shellexec skipifsilent
+Source: "..\dist\OCRApp\workers\worker_medium\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
