@@ -113,21 +113,24 @@ def _native_tables_and_columns(
 ) -> list[OcrBlock]:
     """Blocs ordonnés ; tableaux reconstruits avant le découpage en colonnes."""
     rows = _group_rows(rects)
+    word_gap = _median_word_gap(rows)
+    cell_gap = max(10.0, word_gap * 2.5)
     table_groups: list[tuple[list[list[tuple[float, float, float, float, str]]], list[list[str]]]] = []
     line_rects: list[tuple[float, float, float, float, str]] = []
     pending_rows: list[list[tuple[float, float, float, float, str]]] = []
     pending_cells: list[list[str]] = []
     for row in rows:
-        if _is_tabular_row(row):
+        merged = _merge_row_cells(row, cell_gap)
+        if _is_tabular_row(merged, cell_gap):
             pending_rows.append(row)
-            pending_cells.append([cell[4] for cell in row])
+            pending_cells.append([cell[0] for cell in merged])
         else:
             if pending_rows:
-                table_groups.append((pending_rows, pending_cells))
+                _flush_table(table_groups, pending_rows, pending_cells, line_rects)
                 pending_rows, pending_cells = [], []
             line_rects.extend(row)
     if pending_rows:
-        table_groups.append((pending_rows, pending_cells))
+        _flush_table(table_groups, pending_rows, pending_cells, line_rects)
 
     blocks: list[OcrBlock] = []
     for _column_left, column_rects in _cluster_columns(line_rects):
@@ -154,6 +157,44 @@ def _native_tables_and_columns(
     return blocks
 
 
+def _flush_table(
+    table_groups: list[
+        tuple[list[list[tuple[float, float, float, float, str]]], list[list[str]]]
+    ],
+    rows: list[list[tuple[float, float, float, float, str]]],
+    cells: list[list[str]],
+    line_rects: list[tuple[float, float, float, float, str]],
+) -> None:
+    """Valide un groupe de lignes tabulaires, sinon le rend en lignes simples.
+
+    Un vrai tableau a au moins 2 lignes et une majorité de lignes à >= 3
+    cellules ; un paragraphe justifié isolé est rejeté (faux positif).
+    """
+    tabular = sum(1 for row in cells if len(row) >= 3)
+    if len(rows) >= 2 and tabular >= 2:
+        table_groups.append((rows, _merge_continuations(cells)))
+    else:
+        for row in rows:
+            line_rects.extend(row)
+
+
+def _merge_continuations(cells: list[list[str]]) -> list[list[str]]:
+    """Fusionne une ligne de continuation (texte seul) dans la ligne précédente."""
+    merged: list[list[str]] = []
+    for row in cells:
+        non_empty = [index for index, value in enumerate(row) if value.strip()]
+        if (
+            merged
+            and len(non_empty) == 1
+            and non_empty[0] == 0
+            and len(merged[-1]) >= 3
+        ):
+            merged[-1][0] = f"{merged[-1][0]} {row[0]}".strip()
+            continue
+        merged.append(row)
+    return merged
+
+
 def _group_rows(
     rects: list[tuple[float, float, float, float, str]],
 ) -> list[list[tuple[float, float, float, float, str]]]:
@@ -173,16 +214,67 @@ def _group_rows(
     return rows
 
 
-def _is_tabular_row(row: list[tuple[float, float, float, float, str]]) -> bool:
-    """Ligne tabulaire : au moins 3 cellules et un espacement net entre elles."""
-    if len(row) < 3:
+def _median_word_gap(
+    rows: list[list[tuple[float, float, float, float, str]]],
+) -> float:
+    """Espacement médian entre mots d'une ligne (sert de référence)."""
+    gaps: list[float] = []
+    for row in rows:
+        for index in range(len(row) - 1):
+            gap = row[index + 1][0] - row[index][2]
+            if 0.0 < gap < 40.0:
+                gaps.append(gap)
+    if not gaps:
+        return 4.0
+    gaps.sort()
+    return gaps[len(gaps) // 2]
+
+
+def _merge_row_cells(
+    row: list[tuple[float, float, float, float, str]],
+    cell_gap: float,
+) -> list[tuple[str, float, float]]:
+    """Fusionne les mots proches en cellules ; sépare sur un grand espace.
+
+    Retourne des tuples (texte, x0, x1). C'est ce qui distingue une phrase
+    (mots espacés de ~3-6 pt) d'un tableau (colonnes séparées de 15-60 pt).
+    """
+    cells: list[tuple[str, float, float]] = []
+    for left, _bottom, right, _top, text in row:
+        clean = normalize_text(text).replace(chr(10), " ").strip()
+        if not clean:
+            continue
+        if cells and left - cells[-1][2] <= cell_gap:
+            previous_text, previous_left, _previous_right = cells[-1]
+            cells[-1] = (f"{previous_text} {clean}".strip(), previous_left, right)
+        else:
+            cells.append((_normalise_cell(clean), left, right))
+    return cells
+
+
+def _normalise_cell(text: str) -> str:
+    """Recolle les codes numériques coupés (ex. « 15 4 » -> « 154 »)."""
+    compact = text.replace(" ", "")
+    if (
+        text.count(" ") <= 2
+        and compact.isdigit()
+        and len(compact) <= 6
+        and len(compact) < len(text.replace(" ", "")) + 10
+    ):
+        return compact
+    return " ".join(text.split())
+
+
+def _is_tabular_row(cells: list[tuple[str, float, float]], cell_gap: float) -> bool:
+    """Ligne tabulaire : au moins 3 cellules et 2 espaces de colonne nets."""
+    if len(cells) < 3:
         return False
     gaps = [
-        row[index + 1][0] - row[index][2]
-        for index in range(len(row) - 1)
-        if row[index + 1][0] > row[index][2]
+        cells[index + 1][1] - cells[index][2]
+        for index in range(len(cells) - 1)
+        if cells[index + 1][1] > cells[index][2]
     ]
-    return sum(1 for gap in gaps if gap >= 6.0) >= 2
+    return sum(1 for gap in gaps if gap >= cell_gap) >= 2
 
 
 def _table_block(
@@ -196,7 +288,7 @@ def _table_block(
     right = max(rect[2] for row in rows for rect in row)
     bottom = min(rect[1] for row in rows for rect in row)
     top = max(rect[3] for row in rows for rect in row)
-    text = "\n".join(" | ".join(cell for cell in row) for row in grid)
+    text = chr(10).join(chr(9).join(cell for cell in row) for row in grid)
     return OcrBlock(
         text=text,
         bbox=(left, page_height - top, right, page_height - bottom),

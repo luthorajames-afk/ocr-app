@@ -31,7 +31,11 @@ def process_document(source: str, output: str, dpi: int) -> int:
             header = f"=== Page {page.number} ==="
             if page.has_native_text:
                 native_pages += 1
-                parts.append(f"{header}\n{page.native_text}\n")
+                # Blocs segmentés (ordre colonnes, tableaux en tabulations).
+                page_text = "\n".join(
+                    block.text for block in page.blocks if block.text.strip()
+                ) or page.native_text
+                parts.append(f"{header}\n{page_text}\n")
             else:
                 ocr_pages += 1
                 result = engine.process(page.image)
