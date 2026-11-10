@@ -1,4 +1,4 @@
-"""Thème clair/sombre — tests."""
+"""Thème clair/sombre et réglages — tests."""
 
 from __future__ import annotations
 
@@ -30,20 +30,21 @@ def test_dark_palette_and_stylesheet(qtbot) -> None:
     assert theme.PANEL == "#ffffff"
 
 
-def test_main_window_toggle_switches_theme(qtbot) -> None:
+def test_settings_dialog_exposes_values_and_previews_theme(qtbot) -> None:
     pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication
 
     from core.gui import theme
-    from core.gui.main_window import MainWindow
+    from core.gui.settings_dialog import SettingsDialog
 
-    QApplication.instance() or QApplication([])
-    theme.apply_theme(QApplication.instance(), dark=False)
-    window = MainWindow()
-    qtbot.addWidget(window)
-    assert window.theme_btn.text() == "Sombre"
-    window.theme_btn.click()
+    app = QApplication.instance() or QApplication([])
+    theme.apply_theme(app, dark=False)
+    dialog = SettingsDialog(dpi=200, dark=True, languages="fra")
+    qtbot.addWidget(dialog)
+    assert dialog.dpi == 200
+    assert dialog.dark is True
+    assert dialog.languages == "fra"
+    dialog.apply_theme_preview()
     assert theme.is_dark() is True
-    assert window.theme_btn.text() == "Clair"
-    window.close()
-    theme.apply_theme(QApplication.instance(), dark=False)
+    dialog.close()
+    theme.apply_theme(app, dark=False)

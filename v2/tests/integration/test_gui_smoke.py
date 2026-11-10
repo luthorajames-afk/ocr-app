@@ -82,6 +82,31 @@ def test_task_card_shows_progress_bar_under_name(window, qtbot) -> None:
     assert widget.progress.y() > widget.name.y()  # barre sous le nom
 
 
+def test_multi_page_navigation_zoom_and_detach(window, qtbot) -> None:
+    entry = BY_ID["mixed_001"]
+    assert window.add_file(str(DATA / entry["document"]))
+    task = window._current_task
+    qtbot.waitUntil(lambda: task.status.value == "done", timeout=180_000)
+    assert task.total_pages >= 2
+    assert window.preview.page_label.text().startswith("page 2 /")  # dernière page traitée
+
+    window.preview.prev_btn.click()
+    assert window.preview.page_label.text().startswith("page 1 /")
+    window.preview.next_btn.click()
+    assert window.preview.page_label.text().startswith("page 2 /")
+
+    scale_before = window.preview.view.transform().m11()
+    window.preview.zoom_in_btn.click()
+    assert window.preview.view.transform().m11() > scale_before
+    window.preview.fit_btn.click()
+
+    window.preview.detach_btn.click()
+    assert window.preview._detached is not None
+    assert window.preview._detached.browser.toPlainText().strip()
+    window.preview.detach_btn.click()
+    assert window.preview._detached is None
+
+
 def test_rendered_columns_are_side_by_side(qtbot) -> None:
     """Les pages multi-colonnes sont rendues en tableau HTML (colonnes côte à côte)."""
     from core.gui.main_window import ResultsPanel

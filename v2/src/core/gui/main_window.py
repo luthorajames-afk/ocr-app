@@ -10,7 +10,7 @@ import json
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.gui import theme
+from core.gui.comparison_window import ComparisonWindow
 from core.gui.task_runner import Task, TaskRunner, TaskStatus
 from core.metadata import APP_VERSION
 
@@ -158,7 +159,7 @@ class TaskSidebar(QWidget):
 
 
 class PreviewPanel(QWidget):
-    """Aperçu : page entière ajustée à la vue + navigation entre pages."""
+    """Aperçu : navigation pages, zoom, comparaison inline ou détachée."""
 
     page_requested = Signal(int)
 
@@ -167,15 +168,20 @@ class PreviewPanel(QWidget):
         self.scene = QGraphicsScene(self)
         self.view = QGraphicsView(self.scene, self)
         self.view.setObjectName("Preview")
+        self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.title = QLabel("Aucun document")
         self.title.setObjectName("Title")
         self.info = QLabel("")
         self.info.setObjectName("Muted")
         self.prev_btn = QPushButton("‹", self)
         self.next_btn = QPushButton("›", self)
+        self.zoom_out_btn = QPushButton("−", self)
+        self.zoom_in_btn = QPushButton("+", self)
+        self.fit_btn = QPushButton("Ajuster", self)
         self.compare_btn = QPushButton("Comparer", self)
-        self.prev_btn.setFixedWidth(30)
-        self.next_btn.setFixedWidth(30)
+        self.detach_btn = QPushButton("Détacher", self)
+        for button in (self.prev_btn, self.next_btn, self.zoom_out_btn, self.zoom_in_btn):
+            button.setFixedWidth(30)
         self.page_label = QLabel("", self)
         self.page_label.setObjectName("Muted")
         head = QHBoxLayout()
@@ -185,7 +191,13 @@ class PreviewPanel(QWidget):
         head.addWidget(self.prev_btn)
         head.addWidget(self.page_label)
         head.addWidget(self.next_btn)
+        head.addSpacing(10)
+        head.addWidget(self.zoom_out_btn)
+        head.addWidget(self.zoom_in_btn)
+        head.addWidget(self.fit_btn)
+        head.addSpacing(10)
         head.addWidget(self.compare_btn)
+        head.addWidget(self.detach_btn)
         self.compare = QTextBrowser(self)
         self.compare.setOpenExternalLinks(False)
         body = QSplitter(Qt.Orientation.Horizontal, self)
@@ -200,12 +212,22 @@ class PreviewPanel(QWidget):
         self.compare_btn.toggled.connect(self.compare.setVisible)
         self._page = 1
         self._total = 1
+        self._html = "<p style='color:#68707d'>Résultat en attente…</p>"
+        self._detached: ComparisonWindow | None = None
         self.prev_btn.clicked.connect(lambda: self.page_requested.emit(self._page - 1))
         self.next_btn.clicked.connect(lambda: self.page_requested.emit(self._page + 1))
+        self.zoom_in_btn.clicked.connect(self.zoom_in)
+        self.zoom_out_btn.clicked.connect(self.zoom_out)
+        self.fit_btn.clicked.connect(self.fit_page)
+        self.detach_btn.clicked.connect(self.detach_comparison)
         self.show_placeholder()
 
+    # ------------------------------------------------------------- contenu
     def set_result_html(self, html: str) -> None:
+        self._html = html
         self.compare.setHtml(html)
+        if self._detached is not None:
+            self._detached.set_html(html)
 
     def show_placeholder(self) -> None:
         self.scene.clear()
@@ -226,9 +248,7 @@ class PreviewPanel(QWidget):
             if not pixmap.isNull():
                 self.scene.addPixmap(pixmap)
                 self.scene.setSceneRect(self.scene.itemsBoundingRect())
-                self.view.fitInView(
-                    self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio
-                )
+                self.fit_page()
         else:
             data = Path(task.work_dir) / f"page_{page_number:03d}.json"
             text = ""
@@ -239,9 +259,33 @@ class PreviewPanel(QWidget):
                     text = ""
             self.scene.addRect(0, 0, 430, 608, brush=Qt.GlobalColor.white)
             self.scene.addText((text or "[page en cours]")[:1500])
+            self.fit_page()
         self.title.setText(Path(task.source_path).name)
         self.info.setText(f"{task.total_pages or '?'} page(s)")
 
+    # --------------------------------------------------------------- zoom
+    def zoom_in(self) -> None:
+        self.view.scale(1.2, 1.2)
+
+    def zoom_out(self) -> None:
+        self.view.scale(1 / 1.2, 1 / 1.2)
+
+    def fit_page(self) -> None:
+        if not self.scene.items():
+            return
+        self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+    # ---------------------------------------------------- comparaison détachée
+    def detach_comparison(self) -> None:
+        if self._detached is None:
+            self._detached = ComparisonWindow(self)
+            self._detached.set_html(self._html)
+            self._detached.show()
+            self.detach_btn.setText("Épingler")
+        else:
+            self._detached.close()
+            self._detached = None
+            self.detach_btn.setText("Détacher")
 
 class ResultsPanel(QTabWidget):
     text_edited = Signal(str)
@@ -404,7 +448,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("AOCRI — Advanced Optical Character Recognition for Itamba — v2.0")
         self.resize(1280, 800)
+        self._settings = QSettings("Kriesty Solutions", "AOCRI")
         self._mode = "simple"
+        dpi_value = self._settings.value("dpi", 300)
+        self._dpi = int(dpi_value) if isinstance(dpi_value, (int, float, str)) else 300
+        self._languages = str(self._settings.value("languages", "fra+eng"))
         self._runner = TaskRunner(self)
         self._current_task: Task | None = None
         self._last_page = 0
@@ -448,6 +496,7 @@ class MainWindow(QMainWindow):
         self.bottom.export_btn.clicked.connect(self._export)
         self.sidebar.list.itemClicked.connect(self._on_task_clicked)
 
+        self.preview.page_requested.connect(self._on_page_requested)
         self._runner.task_changed.connect(self._on_task_changed)
         self._runner.page_ready.connect(self._on_page_ready)
         self.results.text_edited.connect(self._on_text_edited)
@@ -473,9 +522,8 @@ class MainWindow(QMainWindow):
             self._modes[key] = button
         self._update_mode_availability()
         add = QPushButton("Fichiers", bar)
-        self.theme_btn = QPushButton("Sombre", bar)
-        self.theme_btn.setCheckable(True)
-        self.theme_btn.clicked.connect(self._toggle_theme)
+        settings = QPushButton("Réglages…", bar)
+        settings.clicked.connect(self._open_settings)
         calibrate = QPushButton("Étalonnage…", bar)
         calibrate.clicked.connect(self._open_calibration)
         add.clicked.connect(self._pick_files)
@@ -486,7 +534,7 @@ class MainWindow(QMainWindow):
         info.setObjectName("Muted")
         layout.addWidget(group)
         layout.addWidget(add)
-        layout.addWidget(self.theme_btn)
+        layout.addWidget(settings)
         self.calibrate_btn = calibrate
         layout.addWidget(calibrate)
         layout.addWidget(scan)
@@ -534,7 +582,9 @@ class MainWindow(QMainWindow):
     def add_file(self, path: str) -> bool:
         if Path(path).suffix.lower() not in SUPPORTED:
             return False
-        task = self._runner.add(path, self._mode)
+        task = self._runner.add(
+            path, self._mode, dpi=self._dpi, languages=self._languages
+        )
         self.sidebar.upsert(task)
         self._current_task = task
         self._runner.start(task.id)
@@ -565,6 +615,9 @@ class MainWindow(QMainWindow):
         task = self._runner.task(task_id)
         if task is None:
             return
+        self._show_page(task, page)
+
+    def _show_page(self, task: Task, page: int) -> None:
         self.preview.show_page(task, page)
         self._active_page = page
         data = Path(task.work_dir) / f"page_{page:03d}.json"
@@ -576,6 +629,17 @@ class MainWindow(QMainWindow):
                 self.preview.set_result_html(self.results.rendered.toHtml())
             except (OSError, ValueError):
                 pass
+
+    def _on_page_requested(self, page: int) -> None:
+        task = self._current_task
+        if task is None:
+            return
+        total = max(1, task.total_pages or 1)
+        page = max(1, min(page, total))
+        if (Path(task.work_dir) / f"page_{page:03d}.json").is_file():
+            self._show_page(task, page)
+        else:
+            self.bottom.label.setText(f"Page {page} non encore traitée")
 
     def _on_text_edited(self, text: str) -> None:
         """R9 — édition avant copie : sauvegarde débouncée de la page active."""
@@ -661,18 +725,31 @@ class MainWindow(QMainWindow):
         if records:
             put_on_clipboard(document_payload(records))
 
-    def _toggle_theme(self) -> None:
+    def _open_settings(self) -> None:
         from PySide6.QtWidgets import QApplication
 
-        dark = self.theme_btn.isChecked()
-        self.theme_btn.setText("Clair" if dark else "Sombre")
+        from core.gui.settings_dialog import SettingsDialog
+
+        dialog = SettingsDialog(
+            dpi=self._dpi, dark=theme.is_dark(), languages=self._languages, parent=self
+        )
+        if dialog.exec() != SettingsDialog.DialogCode.Accepted:
+            return
+        previous_language = self._languages
+        self._dpi = dialog.dpi
+        self._languages = dialog.languages
+        self._settings.setValue("dpi", self._dpi)
+        self._settings.setValue("languages", self._languages)
+        self._settings.setValue("dark", dialog.dark)
         app = QApplication.instance()
         if isinstance(app, QApplication):
-            theme.apply_theme(app, dark=dark)
-        # Rafraîchir les cartes (styles inline recalculés avec la palette).
+            theme.apply_theme(app, dark=dialog.dark)
         for task in self._runner.tasks():
             self.sidebar.upsert(task)
-        self.update()
+        self.preview.set_result_html(self.results.rendered.toHtml())
+        # Changement de langue : relance l'OCR du document courant.
+        if self._languages != previous_language and self._current_task is not None:
+            self.add_file(self._current_task.source_path)
 
     def _open_calibration(self) -> None:
         from core.gui.calibration_dialog import CalibrationDialog

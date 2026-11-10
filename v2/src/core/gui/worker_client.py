@@ -91,6 +91,7 @@ class WorkerClient(QObject):
         work_dir: str | Path,
         dpi: int = 300,
         mode: str = "simple",
+        languages: str = "fra+eng",
     ) -> bool:
         if self._running:
             return False
@@ -116,6 +117,8 @@ class WorkerClient(QObject):
             str(dpi),
             "--mode",
             mode,
+            "--lang",
+            languages,
         ]
         env = QProcessEnvironment.systemEnvironment()
         src = str(Path(__file__).resolve().parents[3] / "src")

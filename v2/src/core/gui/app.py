@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
 from core.gui.main_window import MainWindow
@@ -24,7 +26,9 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName(APP_EDITOR)
-    apply_theme(app, dark=bool(args.dark or __import__('os').environ.get('AOCRI_DARK') == '1'))
+    saved = QSettings("Kriesty Solutions", "AOCRI").value("dark", False)
+    dark = bool(args.dark or os.environ.get("AOCRI_DARK") == "1" or saved in (True, "true", "1"))
+    apply_theme(app, dark=dark)
 
     window = MainWindow()
     for path in args.file:

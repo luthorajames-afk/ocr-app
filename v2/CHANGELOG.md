@@ -88,6 +88,13 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - Thème sombre : palette complète (fond #17181c, panneaux #24262c, accent
   #7d98ff, statuts adaptés), bascule « Sombre/Clair » dans la barre d'outils
   et option `--dark` / `AOCRI_DARK=1` ; 2 tests.
+- Navigation multi-pages : signal page_requested connecté (‹ ›), pages
+  non encore traitées signalées.
+- Aperçu : zoom − / + / Ajuster, déplacement à la souris (ScrollHandDrag),
+  comparaison détachable dans une fenêtre autonome (« Détacher / Épingler »).
+- Réglages : dialogue regroupant DPI (150/200/300), thème, langue du
+  document (relance l'OCR si changée) et « À propos » ; QSettings persistant.
+- Worker : option `--lang` transmise au moteur (fra/eng/fra+eng).
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 

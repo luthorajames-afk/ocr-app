@@ -27,6 +27,8 @@ class Task:
     id: str
     source_path: str
     mode: str = "simple"
+    dpi: int = 300
+    languages: str = "fra+eng"
     status: TaskStatus = TaskStatus.PENDING
     total_pages: int = 0
     pages_done: int = 0
@@ -68,11 +70,19 @@ class TaskRunner(QObject):
     def task(self, task_id: str) -> Task | None:
         return next((t for t in self._tasks if t.id == task_id), None)
 
-    def add(self, source_path: str, mode: str = "simple") -> Task:
+    def add(
+        self,
+        source_path: str,
+        mode: str = "simple",
+        dpi: int = 300,
+        languages: str = "fra+eng",
+    ) -> Task:
         task = Task(
             id=str(uuid.uuid4()),
             source_path=str(Path(source_path).resolve()),
             mode=mode,
+            dpi=max(72, min(int(dpi), 300)),
+            languages=languages,
         )
         task.work_dir = str(work_root() / f"{Path(source_path).stem}_{task.id[:8]}")
         self._tasks.append(task)
@@ -89,7 +99,13 @@ class TaskRunner(QObject):
         task.status = TaskStatus.RUNNING
         self._current = task
         self._emit(task)
-        if not self._client.start(task.source_path, task.work_dir, mode=task.mode):
+        if not self._client.start(
+            task.source_path,
+            task.work_dir,
+            dpi=task.dpi,
+            mode=task.mode,
+            languages=task.languages,
+        ):
             task.status = TaskStatus.ERROR
             task.error = "worker indisponible"
             self._current = None

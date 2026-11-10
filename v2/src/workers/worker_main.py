@@ -66,6 +66,7 @@ class Worker:
         mode: str = "simple",
         second_pass: bool = False,
         lexicon: bool = False,
+        languages: str = "fra+eng",
     ) -> None:
         self.input_path = input_path
         self.work_dir = work_dir
@@ -74,6 +75,7 @@ class Worker:
         self.mode = mode
         self.second_pass = second_pass
         self.lexicon = lexicon
+        self.languages = [part for part in languages.split("+") if part] or None
         self._pause = threading.Event()
         self._cancel = threading.Event()
         self._done = threading.Event()
@@ -154,7 +156,7 @@ class Worker:
                         from core.pipeline.preprocess import preprocess
 
                         prepared = preprocess(page.image)
-                        result = engine.process(prepared.image)
+                        result = engine.process(prepared.image, languages=self.languages)
                         if self.second_pass and hasattr(engine, "process_region"):
                             from dataclasses import replace as dc_replace
 
@@ -250,6 +252,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--mode", choices=("simple", "medium", "advanced", "approfondi"), default="simple"
     )
+    parser.add_argument("--lang", default="fra+eng", help="langues OCR (ex. fra+eng)")
     parser.add_argument("--second-pass", action="store_true", help="re-OCR des lignes sous confiance")
     parser.add_argument("--lexicon", action="store_true", help="post-correction lexique (références intactes)")
     parser.add_argument("--no-resume", action="store_true", help="ignorer les pages déjà sauvegardées")
@@ -270,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         mode=args.mode,
         second_pass=args.second_pass,
         lexicon=args.lexicon,
+        languages=args.lang,
     )
 
     try:
