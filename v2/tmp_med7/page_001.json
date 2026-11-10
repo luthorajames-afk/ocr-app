@@ -1,0 +1,947 @@
+{
+  "schema_version": 1,
+  "page": 1,
+  "source": "tests\\data\\documents\\scan_001.pdf",
+  "engine": "rapidocr",
+  "engine_version": "3.10.0",
+  "duration_ms": 12026.439000037499,
+  "text": "SARL Dupont & Fils\nMatériel informatique et bureautique\n42 rue des Lilas ·75012 Paris\nTél.01 43 27 65 18— contact@dupont-fils.fr\nSIRET 812 345 678 00027—TVA FR 32 812345678\nFACTURÉ À\nMme Élodie Marchand\n14 rue des Écoles\n75011 Paris\nelodie.marchand@example.fr\nTVA FR 12 445566778\nDésignation\nSupport téléphone\nCâble HDMI 2 m\nDisque SSD externe 1 To\nPrestation de maintenance\nClavier mécanique AZERTY\nPochette de 100 chemises\nBloc-notes A5\nMODALITÉS DE RÈGLEMENT\nPaiement à réception de la facture. Virement bancaire sur le compte IBAN FR76 3000\n4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de\nfacture en référence.\nSARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois\nfoist : e td    t :     t e : da e t  sant\nQté\nUnité\nunité\n3\nunité\n6\nunité\n6\n8\nheure\nunité\n4\n3\nlot\nunité\n8\nSous-total HT :\nTVA 5,5 % (base 30,40 €) :\nTVA 20 % (base 1 946,50 €) :\nTotal TTC :\nFACTURE\nTVA\nP.U. HT\n19,90 €\n20 %\n12,90 €\n20%\n119,00 €\n20 %\n90,00 €\n20 %\n79,90 €\n20 %\n18,60 €\n20 %\n3,80 €\n5,5 %\nN° SC-2026-001\nDate : 6 février 2026\nÉchéance : 8 mars 2026\nMontant HT\n59,70 €\n77,40 €\n714,00 €\n720,00 €\n319,60 €\n55,80 €\n30,40 €\n1 976,90 €\n1,67 €\n389,30 €\n2 367,87 €\nPage 1 / 1",
+  "blocks": [
+    {
+      "text": "SARL Dupont & Fils",
+      "bbox": [
+        19.2,
+        11.28,
+        96.96,
+        21.599999999999998
+      ],
+      "confidence": 0.99386,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Matériel informatique et bureautique",
+      "bbox": [
+        19.68,
+        20.88,
+        83.03999999999999,
+        26.88
+      ],
+      "confidence": 0.99985,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "42 rue des Lilas ·75012 Paris",
+      "bbox": [
+        20.16,
+        26.4,
+        72.72,
+        31.919999999999998
+      ],
+      "confidence": 0.98201,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Tél.01 43 27 65 18— contact@dupont-fils.fr",
+      "bbox": [
+        20.16,
+        31.68,
+        97.67999999999999,
+        36.96
+      ],
+      "confidence": 0.97026,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "SIRET 812 345 678 00027—TVA FR 32 812345678",
+      "bbox": [
+        19.68,
+        36.24,
+        112.8,
+        42.239999999999995
+      ],
+      "confidence": 0.97148,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURÉ À",
+      "bbox": [
+        23.52,
+        56.4,
+        48.96,
+        62.879999999999995
+      ],
+      "confidence": 0.9794,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Mme Élodie Marchand",
+      "bbox": [
+        24.0,
+        61.68,
+        81.11999999999999,
+        68.16
+      ],
+      "confidence": 0.99507,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "14 rue des Écoles",
+      "bbox": [
+        24.24,
+        67.44,
+        60.48,
+        73.2
+      ],
+      "confidence": 0.99331,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "75011 Paris",
+      "bbox": [
+        24.0,
+        73.2,
+        48.96,
+        78.96
+      ],
+      "confidence": 0.99984,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "elodie.marchand@example.fr",
+      "bbox": [
+        23.52,
+        78.48,
+        82.56,
+        85.2
+      ],
+      "confidence": 0.99997,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA FR 12 445566778",
+      "bbox": [
+        23.759999999999998,
+        84.24,
+        70.08,
+        90.47999999999999
+      ],
+      "confidence": 0.98635,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Désignation",
+      "bbox": [
+        21.36,
+        97.2,
+        48.96,
+        104.39999999999999
+      ],
+      "confidence": 0.99993,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Support téléphone",
+      "bbox": [
+        21.36,
+        103.92,
+        59.519999999999996,
+        111.36
+      ],
+      "confidence": 0.99991,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Câble HDMI 2 m",
+      "bbox": [
+        22.08,
+        111.6,
+        55.919999999999995,
+        117.36
+      ],
+      "confidence": 0.99454,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Disque SSD externe 1 To",
+      "bbox": [
+        21.599999999999998,
+        118.08,
+        73.2,
+        124.8
+      ],
+      "confidence": 0.9929,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Prestation de maintenance",
+      "bbox": [
+        21.84,
+        125.75999999999999,
+        75.11999999999999,
+        131.28
+      ],
+      "confidence": 0.99984,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Clavier mécanique AZERTY",
+      "bbox": [
+        21.84,
+        132.48,
+        78.0,
+        138.72
+      ],
+      "confidence": 0.99788,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Pochette de 100 chemises",
+      "bbox": [
+        21.84,
+        139.44,
+        74.88,
+        145.44
+      ],
+      "confidence": 0.99926,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Bloc-notes A5",
+      "bbox": [
+        22.08,
+        146.88,
+        51.12,
+        152.4
+      ],
+      "confidence": 0.99977,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "MODALITÉS DE RÈGLEMENT",
+      "bbox": [
+        21.36,
+        192.95999999999998,
+        79.44,
+        198.48
+      ],
+      "confidence": 0.99401,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Paiement à réception de la facture. Virement bancaire sur le compte IBAN FR76 3000",
+      "bbox": [
+        20.64,
+        196.79999999999998,
+        168.0,
+        203.51999999999998
+      ],
+      "confidence": 0.98372,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de",
+      "bbox": [
+        20.88,
+        202.32,
+        165.6,
+        208.56
+      ],
+      "confidence": 0.9821,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "facture en référence.",
+      "bbox": [
+        21.119999999999997,
+        208.56,
+        57.839999999999996,
+        214.07999999999998
+      ],
+      "confidence": 0.98861,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "SARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois",
+      "bbox": [
+        22.32,
+        393.84,
+        251.04,
+        400.56
+      ],
+      "confidence": 0.97788,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "foist : e td    t :     t e : da e t  sant",
+      "bbox": [
+        22.08,
+        398.64,
+        196.07999999999998,
+        405.12
+      ],
+      "confidence": 0.56205,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Qté",
+      "bbox": [
+        147.84,
+        96.47999999999999,
+        157.44,
+        102.96
+      ],
+      "confidence": 0.99972,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Unité",
+      "bbox": [
+        130.32,
+        96.72,
+        143.76,
+        102.96
+      ],
+      "confidence": 0.99992,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "unité",
+      "bbox": [
+        130.79999999999998,
+        103.44,
+        143.28,
+        110.16
+      ],
+      "confidence": 0.99994,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "3",
+      "bbox": [
+        150.0,
+        103.92,
+        155.04,
+        109.67999999999999
+      ],
+      "confidence": 0.99994,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "unité",
+      "bbox": [
+        131.04,
+        110.64,
+        143.28,
+        116.88
+      ],
+      "confidence": 0.99995,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "6",
+      "bbox": [
+        150.0,
+        110.64,
+        155.04,
+        116.64
+      ],
+      "confidence": 0.99996,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "unité",
+      "bbox": [
+        130.79999999999998,
+        117.36,
+        143.51999999999998,
+        124.32
+      ],
+      "confidence": 0.99992,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "6",
+      "bbox": [
+        150.0,
+        117.36,
+        155.28,
+        123.6
+      ],
+      "confidence": 0.99994,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "8",
+      "bbox": [
+        150.0,
+        124.56,
+        155.28,
+        130.79999999999998
+      ],
+      "confidence": 0.99993,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "heure",
+      "bbox": [
+        130.32,
+        124.8,
+        144.0,
+        130.79999999999998
+      ],
+      "confidence": 0.99997,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "unité",
+      "bbox": [
+        131.04,
+        131.51999999999998,
+        143.76,
+        138.48
+      ],
+      "confidence": 0.99994,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "4",
+      "bbox": [
+        150.23999999999998,
+        131.76,
+        155.28,
+        138.0
+      ],
+      "confidence": 0.99988,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "3",
+      "bbox": [
+        150.23999999999998,
+        138.72,
+        155.28,
+        144.96
+      ],
+      "confidence": 0.99992,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "lot",
+      "bbox": [
+        133.44,
+        138.96,
+        141.35999999999999,
+        144.96
+      ],
+      "confidence": 0.99912,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "unité",
+      "bbox": [
+        131.28,
+        145.92,
+        143.28,
+        152.16
+      ],
+      "confidence": 0.99992,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "8",
+      "bbox": [
+        150.23999999999998,
+        145.92,
+        155.28,
+        151.92
+      ],
+      "confidence": 0.99996,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Sous-total HT :",
+      "bbox": [
+        164.4,
+        158.88,
+        197.04,
+        164.64
+      ],
+      "confidence": 0.99003,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA 5,5 % (base 30,40 €) :",
+      "bbox": [
+        164.16,
+        164.16,
+        222.48,
+        171.12
+      ],
+      "confidence": 0.94985,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA 20 % (base 1 946,50 €) :",
+      "bbox": [
+        164.16,
+        169.92,
+        227.76,
+        176.88
+      ],
+      "confidence": 0.97259,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Total TTC :",
+      "bbox": [
+        164.4,
+        176.16,
+        191.76,
+        182.64
+      ],
+      "confidence": 0.99135,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURE",
+      "bbox": [
+        201.84,
+        11.28,
+        276.0,
+        26.4
+      ],
+      "confidence": 0.9999,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA",
+      "bbox": [
+        200.4,
+        96.0,
+        212.64,
+        102.96
+      ],
+      "confidence": 0.99995,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "P.U. HT",
+      "bbox": [
+        177.6,
+        96.47999999999999,
+        195.35999999999999,
+        102.47999999999999
+      ],
+      "confidence": 0.94392,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "19,90 €",
+      "bbox": [
+        178.79999999999998,
+        103.2,
+        195.84,
+        109.67999999999999
+      ],
+      "confidence": 0.94214,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "20 %",
+      "bbox": [
+        200.4,
+        103.2,
+        212.88,
+        109.2
+      ],
+      "confidence": 0.99172,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "12,90 €",
+      "bbox": [
+        178.79999999999998,
+        109.92,
+        195.84,
+        116.64
+      ],
+      "confidence": 0.99778,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "20%",
+      "bbox": [
+        200.4,
+        110.16,
+        213.12,
+        116.39999999999999
+      ],
+      "confidence": 0.99934,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "119,00 €",
+      "bbox": [
+        176.64,
+        117.11999999999999,
+        195.84,
+        123.6
+      ],
+      "confidence": 0.99834,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "20 %",
+      "bbox": [
+        200.64,
+        117.11999999999999,
+        212.88,
+        123.36
+      ],
+      "confidence": 0.98194,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "90,00 €",
+      "bbox": [
+        178.32,
+        123.6,
+        196.32,
+        131.04
+      ],
+      "confidence": 0.99215,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "20 %",
+      "bbox": [
+        200.64,
+        124.08,
+        213.12,
+        130.32
+      ],
+      "confidence": 0.97763,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "79,90 €",
+      "bbox": [
+        178.79999999999998,
+        131.28,
+        196.07999999999998,
+        138.0
+      ],
+      "confidence": 0.9976,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "20 %",
+      "bbox": [
+        200.64,
+        131.28,
+        213.12,
+        137.51999999999998
+      ],
+      "confidence": 0.96291,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "18,60 €",
+      "bbox": [
+        179.04,
+        138.24,
+        196.07999999999998,
+        144.96
+      ],
+      "confidence": 0.99883,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "20 %",
+      "bbox": [
+        200.64,
+        138.24,
+        213.12,
+        144.48
+      ],
+      "confidence": 0.94997,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "3,80 €",
+      "bbox": [
+        180.95999999999998,
+        145.2,
+        196.32,
+        151.92
+      ],
+      "confidence": 0.97904,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "5,5 %",
+      "bbox": [
+        199.68,
+        145.2,
+        213.84,
+        151.92
+      ],
+      "confidence": 0.97672,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "N° SC-2026-001",
+      "bbox": [
+        241.67999999999998,
+        26.16,
+        275.28,
+        31.919999999999998
+      ],
+      "confidence": 0.98836,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Date : 6 février 2026",
+      "bbox": [
+        234.23999999999998,
+        32.16,
+        275.52,
+        38.64
+      ],
+      "confidence": 0.99614,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Échéance : 8 mars 2026",
+      "bbox": [
+        226.79999999999998,
+        38.64,
+        275.76,
+        44.879999999999995
+      ],
+      "confidence": 0.98148,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Montant HT",
+      "bbox": [
+        248.64,
+        95.75999999999999,
+        275.03999999999996,
+        102.24
+      ],
+      "confidence": 0.99976,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "59,70 €",
+      "bbox": [
+        258.0,
+        102.72,
+        275.28,
+        109.2
+      ],
+      "confidence": 0.96844,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "77,40 €",
+      "bbox": [
+        258.0,
+        109.44,
+        275.28,
+        116.16
+      ],
+      "confidence": 0.99728,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "714,00 €",
+      "bbox": [
+        255.35999999999999,
+        116.16,
+        275.28,
+        123.36
+      ],
+      "confidence": 0.99951,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "720,00 €",
+      "bbox": [
+        255.84,
+        123.6,
+        275.28,
+        130.07999999999998
+      ],
+      "confidence": 0.99971,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "319,60 €",
+      "bbox": [
+        255.6,
+        130.79999999999998,
+        275.52,
+        137.28
+      ],
+      "confidence": 0.99972,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "55,80 €",
+      "bbox": [
+        258.48,
+        138.0,
+        275.28,
+        144.0
+      ],
+      "confidence": 0.99871,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "30,40 €",
+      "bbox": [
+        258.24,
+        144.72,
+        275.52,
+        151.44
+      ],
+      "confidence": 0.99857,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "1 976,90 €",
+      "bbox": [
+        249.6,
+        158.16,
+        274.08,
+        164.64
+      ],
+      "confidence": 0.99516,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "1,67 €",
+      "bbox": [
+        258.24,
+        163.68,
+        273.84,
+        170.4
+      ],
+      "confidence": 0.99903,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "389,30 €",
+      "bbox": [
+        253.2,
+        169.68,
+        274.08,
+        176.16
+      ],
+      "confidence": 0.99978,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "2 367,87 €",
+      "bbox": [
+        248.64,
+        175.44,
+        274.08,
+        181.92
+      ],
+      "confidence": 0.99983,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Page 1 / 1",
+      "bbox": [
+        260.4,
+        393.84,
+        278.15999999999997,
+        399.59999999999997
+      ],
+      "confidence": 0.89892,
+      "kind": "line",
+      "grid": []
+    }
+  ]
+}

@@ -15,6 +15,17 @@ from core.pipeline.interfaces import (
 )
 
 
+def _as_list(value: object) -> list[object]:
+    """Convertit un tableau numpy / tuple / None en liste (sans 'or')."""
+    if value is None:
+        return []
+    try:
+        items: list[object] = list(value)  # type: ignore[call-overload]
+    except TypeError:
+        return []
+    return items
+
+
 class RapidOcrEngine(OcrEngine):
     """RapidOCR dans son environnement (venv medium), jamais dans le noyau."""
 
@@ -63,9 +74,9 @@ class RapidOcrEngine(OcrEngine):
         assert self._engine is not None
         started = time.perf_counter()
         result = self._engine(image.convert("RGB"))
-        texts = list(getattr(result, "txts", None) or [])
-        boxes = list(getattr(result, "boxes", None) or [])
-        scores = list(getattr(result, "scores", None) or [])
+        texts = _as_list(getattr(result, "txts", None))
+        boxes = _as_list(getattr(result, "boxes", None))
+        scores = _as_list(getattr(result, "scores", None))
 
         blocks: list[OcrBlock] = []
         scale = 72.0 / 300.0  # bboxes en points (page rendue à 300 DPI)

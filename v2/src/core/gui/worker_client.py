@@ -64,10 +64,14 @@ def advanced_python() -> str:
 
 
 def medium_available() -> bool:
+    if frozen_worker("medium") is not None:
+        return True
     return Path(medium_python()).resolve() != Path(sys.executable).resolve()
 
 
 def advanced_available() -> bool:
+    if frozen_worker("advanced") is not None:
+        return True
     return Path(advanced_python()).resolve() != Path(sys.executable).resolve()
 
 

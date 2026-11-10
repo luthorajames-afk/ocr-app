@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "page": 1,
+  "source": "tests\\data\\documents\\scan_001.pdf",
+  "engine": "docling",
+  "engine_version": "2.149.0",
+  "duration_ms": 47055.20800000522,
+  "text": "SARL Dupont & Fils\nMatériel informatique et bureautique\n42 rue des Lilas - 75012 Paris Tél. 01 43 27 6518—contact@dupont-fils.fr SIRET 812 345 678 00027— TVA FR 32 812345678\nFACTURÉ À Mme Élodie Marchand\n14 rue des Écoles\n75011 Paris\nelodie.marchand@example.fr\nTVA FR 12 445566778\n| Désignation               | Unité   |   Qté | P.U. HT   | TVA   | Montant HT   |\n|---------------------------|---------|-------|-----------|-------|--------------|\n| Support téléphone         | unité   |     3 | 19,90 €   | 20 %  | 59,70 €      |\n| Câble HDMI 2 m            | unité   |     6 | 12,90 €   | 20 %  | 77,40 €      |\n| Disque SSD externe 1 To   | unité   |     6 | 119,00 €  | 20 %  | 714,00 €     |\n| Prestation de maintenance | heure   |     8 | 90,00 €   | 20 %  | 720,00 €     |\n| Clavier mécanique AZERTY  | unité   |     4 | 79,90 €   | 20 %  | 319,60 €     |\n| Pochette de 100 chemises  | lot     |     3 | 18,60 €   | 20 %  | 55,80 €      |\n| Bloc-notes A5             | unité   |     8 | 3,80 €    | 5,5 % | 30,40 €      |\nMODALITÉS DE RÈGLEMENT\nPaiement à réception de la facture. Virement bancaire sur le compte IBAN FR76 3000 4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de facture en référence.\nFACTURE\n| Sous-total HT :              | 1 976,90 €   |\n|------------------------------|--------------|\n| TVA 5,5 % (base 30,40 €) :   | 1,67 €       |\n| TVA 20 % (base 1 946,50 €) : | 389,30 €     |\n| Total TTC :                  | 2 367,87 €   |\nN° SC-2026-001\nDate : 6 février 2026\nÉchéance : 8 mars 2026",
+  "blocks": [
+    {
+      "text": "SARL Dupont & Fils",
+      "bbox": [
+        19.0,
+        11.333333333333314,
+        97.0,
+        21.333333333333314
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Matériel informatique et bureautique",
+      "bbox": [
+        20.333333333333336,
+        21.333333333333314,
+        83.0,
+        26.333333333333314
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "42 rue des Lilas - 75012 Paris Tél. 01 43 27 6518—contact@dupont-fils.fr SIRET 812 345 678 00027— TVA FR 32 812345678",
+      "bbox": [
+        19.666666666666664,
+        26.0,
+        113.0,
+        42.0
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURÉ À Mme Élodie Marchand",
+      "bbox": [
+        23.0,
+        56.333333333333314,
+        81.33333333333333,
+        68.0
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "14 rue des Écoles",
+      "bbox": [
+        23.666666666666664,
+        67.0,
+        61.0,
+        74.0
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "75011 Paris",
+      "bbox": [
+        24.0,
+        73.0,
+        49.0,
+        79.33333333333331
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "elodie.marchand@example.fr",
+      "bbox": [
+        23.333333333333336,
+        78.33333333333331,
+        83.0,
+        85.0
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA FR 12 445566778",
+      "bbox": [
+        23.666666666666664,
+        84.66666666666669,
+        70.66666666666666,
+        90.33333333333331
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "| Désignation               | Unité   |   Qté | P.U. HT   | TVA   | Montant HT   |\n|---------------------------|---------|-------|-----------|-------|--------------|\n| Support téléphone         | unité   |     3 | 19,90 €   | 20 %  | 59,70 €      |\n| Câble HDMI 2 m            | unité   |     6 | 12,90 €   | 20 %  | 77,40 €      |\n| Disque SSD externe 1 To   | unité   |     6 | 119,00 €  | 20 %  | 714,00 €     |\n| Prestation de maintenance | heure   |     8 | 90,00 €   | 20 %  | 720,00 €     |\n| Clavier mécanique AZERTY  | unité   |     4 | 79,90 €   | 20 %  | 319,60 €     |\n| Pochette de 100 chemises  | lot     |     3 | 18,60 €   | 20 %  | 55,80 €      |\n| Bloc-notes A5             | unité   |     8 | 3,80 €    | 5,5 % | 30,40 €      |",
+      "bbox": [
+        20.658007400335073,
+        94.87662677889006,
+        276.1532891557551,
+        152.93021707095414
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "MODALITÉS DE RÈGLEMENT",
+      "bbox": [
+        21.0,
+        192.66666666666666,
+        79.66666666666667,
+        198.66666666666666
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Paiement à réception de la facture. Virement bancaire sur le compte IBAN FR76 3000 4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de facture en référence.",
+      "bbox": [
+        20.666666666666664,
+        197.66666666666666,
+        168.33333333333334,
+        214.33333333333334
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURE",
+      "bbox": [
+        201.33333333333334,
+        11.333333333333314,
+        276.3333333333333,
+        25.666666666666686
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "| Sous-total HT :              | 1 976,90 €   |\n|------------------------------|--------------|\n| TVA 5,5 % (base 30,40 €) :   | 1,67 €       |\n| TVA 20 % (base 1 946,50 €) : | 389,30 €     |\n| Total TTC :                  | 2 367,87 €   |",
+      "bbox": [
+        161.61829008179174,
+        154.90874701594265,
+        276.8348091717943,
+        186.373410482495
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "N° SC-2026-001",
+      "bbox": [
+        241.33333333333334,
+        25.333333333333314,
+        275.6666666666667,
+        32.333333333333314
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Date : 6 février 2026",
+      "bbox": [
+        234.0,
+        32.0,
+        275.6666666666667,
+        38.333333333333314
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Échéance : 8 mars 2026",
+      "bbox": [
+        226.66666666666666,
+        39.0,
+        275.6666666666667,
+        45.0
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    }
+  ]
+}

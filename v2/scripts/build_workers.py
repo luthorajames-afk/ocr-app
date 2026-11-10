@@ -82,6 +82,45 @@ def build_command(target: str, venv: Path | None = None) -> list[str]:
         if tessdata.is_dir():
             command += ["--add-data", f"{tessdata};models/tessdata"]
         command += ["--hidden-import", "tesserocr"]
+    elif target == "medium":
+        command += [
+            "--collect-all",
+            "rapidocr",
+            "--collect-all",
+            "onnxruntime",
+            "--collect-all",
+            "cv2",
+        ]
+    elif target == "advanced":
+        command += [
+            "--collect-all",
+            "docling",
+            "--collect-all",
+            "docling_core",
+            "--collect-all",
+            "docling_ibm_models",
+            "--collect-all",
+            "latex2mathml",
+            "--collect-all",
+            "rapidocr",
+            "--collect-all",
+            "onnxruntime",
+            "--collect-all",
+            "transformers",
+            "--collect-all",
+            "tokenizers",
+            "--collect-all",
+            "safetensors",
+            "--collect-all",
+            "torchvision",
+            "--hidden-import",
+            "transformers.models.rt_detr.image_processing_rt_detr",
+            "--hidden-import",
+            "transformers.models.rt_detr.modeling_rt_detr",
+        ]
+        hf_cache = Path.home() / ".cache" / "huggingface"
+        if hf_cache.is_dir():
+            command += ["--add-data", f"{hf_cache};hf"]
     command.append(str(PROJECT / "src" / "workers" / "worker_main.py"))
     return command
 

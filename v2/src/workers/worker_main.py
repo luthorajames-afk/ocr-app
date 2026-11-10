@@ -76,6 +76,7 @@ class Worker:
         languages: str = "fra+eng",
         page: int | None = None,
         best_variant: bool = False,
+        engine: OcrEngine | None = None,
     ) -> None:
         self.input_path = input_path
         self.work_dir = work_dir
@@ -88,6 +89,7 @@ class Worker:
         self.languages = [part for part in languages.split("+") if part] or None
         self.page = page
         self.best_variant = best_variant
+        self._engine = engine
         self._pause = threading.Event()
         self._cancel = threading.Event()
         self._done = threading.Event()
@@ -121,16 +123,23 @@ class Worker:
         emit(ProgressMessage(page=page, total=total, stage=stage))
         return True
 
+    def _debug(self, message: str) -> None:
+        if os.environ.get("AOCRI_DEBUG") == "1":
+            print(f"[worker:{self.mode}] {message}", file=sys.stderr, flush=True)
+
     def _process(self) -> None:
         try:
+            self._debug("thread start")
             # R7 : rendu page par page, une seule image en mémoire.
+            self._debug("counting pages")
             total = page_count(self.input_path)
+            self._debug(f"pages={total}")
             if self.page is not None:
                 self.page = max(1, min(int(self.page), total))
                 total = 1
             pages = iter_document_pages(self.input_path, dpi=self.dpi)
             already = saved_pages(self.work_dir) if self._resume_existing else set()
-            engine = build_engine(self.mode)
+            engine = self._engine if self._engine is not None else build_engine(self.mode)
             engine.initialize()
             try:
                 for page in pages:
@@ -138,6 +147,7 @@ class Worker:
                         continue
                     if self._cancel.is_set():
                         break
+                    self._debug(f"page {page.number} start")
                     if page.number in already:
                         emit(PageDoneMessage(page=page.number, result_path=str(
                             self.work_dir / f"page_{page.number:03d}.json")))
@@ -174,7 +184,9 @@ class Worker:
                         from core.pipeline.preprocess import preprocess
 
                         prepared = preprocess(page.image)
+                        self._debug("ocr start")
                         result = engine.process(prepared.image, languages=self.languages)
+                        self._debug("ocr done")
                         if self.best_variant:
                             # Compare brut vs prétraité : garde la meilleure confiance.
                             raw_result = engine.process(page.image, languages=self.languages)
@@ -259,13 +271,25 @@ def _preload(mode: str) -> None:
     import pypdfium2  # noqa: F401
 
     if mode == "medium":
+        # Précharger TOUTES les DLL lourdes dans le thread principal avant la
+        # lecture stdin (chargeur Windows) : onnxruntime/cv2/rapidocr.
+        import cv2  # noqa: F401
+        import onnxruntime  # noqa: F401
         import rapidocr  # noqa: F401
     if mode in ("advanced", "approfondi"):
+        bundle = getattr(sys, "_MEIPASS", None)
+        if bundle:
+            bundled_hf = Path(bundle) / "hf"
+            if bundled_hf.is_dir():
+                os.environ.setdefault("HF_HOME", str(bundled_hf))
+                os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(bundled_hf / "hub"))
+                os.environ.setdefault("HF_HUB_CACHE", str(bundled_hf / "hub"))
         # Précharger le convertisseur (sous-modules + DLL torch/docling) dans
         # le thread principal : sinon blocage du chargeur pendant que le
         # thread principal lit stdin (même classe de bug que v1).
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        import torch  # noqa: F401
         from docling.document_converter import DocumentConverter  # noqa: F401
 
 
@@ -294,6 +318,10 @@ def main(argv: list[str] | None = None) -> int:
     _preload(args.mode)
     work_dir = Path(args.work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
+    # Initialisation du moteur dans le thread principal : les DLL lourdes
+    # (onnxruntime/torch) sont chargées avant toute lecture stdin.
+    engine = build_engine(args.mode)
+    engine.initialize()
     worker = Worker(
         input_path,
         work_dir,
@@ -305,6 +333,7 @@ def main(argv: list[str] | None = None) -> int:
         languages=args.lang,
         page=args.page,
         best_variant=args.best_variant,
+        engine=engine,
     )
 
     try:
