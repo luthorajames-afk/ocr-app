@@ -52,6 +52,23 @@ def test_empty_text_is_stable() -> None:
     assert report.count == 0
 
 
+def test_english_legal_terms_and_artifacts() -> None:
+    report = correct_text("the govemment expenditrue section", language="en")
+    assert "government" in report.text
+    assert "expenditure" in report.text
+
+
+def test_bilingual_mode_corrects_french_and_english() -> None:
+    report = correct_text("le decret et the govemment", language="bilingual")
+    assert "décret" in report.text
+    assert "government" in report.text
+
+
+def test_language_selection_limits_scope() -> None:
+    english_only = correct_text("le decret", language="en")
+    assert "décret" not in english_only.text
+
+
 def test_short_tokens_are_untouched() -> None:
     report = correct_text("le la un")
     assert report.text == "le la un"

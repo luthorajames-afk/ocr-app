@@ -33,6 +33,49 @@ from core.pipeline.protocol import (
 STAGES = ("render", "preprocess", "layout", "ocr", "reconstruct", "save")
 
 
+def _lexicon_language(languages: list[str] | None) -> str:
+    """fr / en / bilingual selon les langues OCR demandées."""
+    codes = set(languages or [])
+    if "fra" in codes and "eng" in codes:
+        return "bilingual"
+    if codes == {"fra"}:
+        return "fr"
+    if codes == {"eng"}:
+        return "en"
+    return "bilingual"
+
+
+def _correct_blocks(blocks: list[dict[str, object]], language: str) -> None:
+    """Corrige le texte des blocs (références protégées).
+
+    Les tableaux sont traités cellule par cellule, et seulement si la cellule
+    ne contient aucun chiffre (codes, montants et références intacts).
+    """
+    from core.pipeline.lexicon import correct_text
+
+    for block in blocks:
+        if block.get("kind") == "table":
+            grid = block.get("grid")
+            if not isinstance(grid, list):
+                continue
+            new_grid: list[list[str]] = []
+            for row in grid:
+                new_row: list[str] = []
+                for cell in row if isinstance(row, list) else []:
+                    value = str(cell)
+                    if value.strip() and not any(ch.isdigit() for ch in value) and len(value) >= 4:
+                        value = correct_text(value, language=language).text
+                    new_row.append(value)
+                new_grid.append(new_row)
+            block["grid"] = new_grid
+            block["text"] = chr(10).join(chr(9).join(row) for row in new_grid)
+            continue
+        text = str(block.get("text", ""))
+        if not text.strip():
+            continue
+        block["text"] = correct_text(text, language=language).text
+
+
 def _mean_confidence(result: object) -> float:
     """Confiance moyenne des blocs (0 si aucun bloc)."""
     blocks = getattr(result, "blocks", ()) or ()
@@ -72,7 +115,7 @@ class Worker:
         resume_existing: bool = True,
         mode: str = "simple",
         second_pass: bool = False,
-        lexicon: bool = False,
+        lexicon: bool = True,
         languages: str = "fra+eng",
         page: int | None = None,
         best_variant: bool = False,
@@ -87,6 +130,7 @@ class Worker:
         self.second_pass = second_pass
         self.lexicon = lexicon
         self.languages = [part for part in languages.split("+") if part] or None
+        self.lexicon_language = _lexicon_language(self.languages)
         self.page = page
         self.best_variant = best_variant
         self._engine = engine
@@ -171,10 +215,14 @@ class Worker:
                             }
                             for block in page.blocks
                         ]
+                        if self.lexicon:
+                            _correct_blocks(blocks, self.lexicon_language)
                         # Texte dans l'ordre de lecture des colonnes (pas l'ordre
                         # brut de la couche PDF, souvent ligne par ligne).
                         text = chr(10).join(
-                            block.text for block in page.blocks if block.text.strip()
+                            str(block["text"])
+                            for block in blocks
+                            if str(block.get("text", "")).strip()
                         )
                         if not self._checkpoint(page.number, total, "ocr"):
                             break
@@ -201,12 +249,7 @@ class Worker:
 
                             report = apply_second_pass(page.image, result, engine)
                             result = report.result
-                        if self.lexicon:
-                            from dataclasses import replace as dc_replace
 
-                            from core.pipeline.lexicon import correct_text
-
-                            result = dc_replace(result, text=correct_text(result.text).text)
                         from dataclasses import replace as dc_replace
 
                         from core.pipeline.layout import order_blocks_in_columns
@@ -229,6 +272,13 @@ class Worker:
                             }
                             for block in result.blocks
                         ]
+                        if self.lexicon:
+                            _correct_blocks(blocks, self.lexicon_language)
+                            text = chr(10).join(
+                                str(block["text"])
+                                for block in blocks
+                                if str(block.get("text", "")).strip()
+                            )
                     if not self._checkpoint(page.number, total, "reconstruct"):
                         break
                     record = PageRecord(
@@ -307,7 +357,16 @@ def main(argv: list[str] | None = None) -> int:
         "--best-variant", action="store_true", help="choisir le meilleur pretraitement par page"
     )
     parser.add_argument("--second-pass", action="store_true", help="re-OCR des lignes sous confiance")
-    parser.add_argument("--lexicon", action="store_true", help="post-correction lexique (références intactes)")
+    parser.add_argument(
+        "--lexicon", dest="lexicon", action="store_true", help=argparse.SUPPRESS
+    )
+    parser.add_argument(
+        "--no-lexicon",
+        dest="lexicon",
+        action="store_false",
+        help="désactiver le correcteur lexical juridique FR/EN",
+    )
+    parser.set_defaults(lexicon=True)
     parser.add_argument("--no-resume", action="store_true", help="ignorer les pages déjà sauvegardées")
     args = parser.parse_args(argv)
 

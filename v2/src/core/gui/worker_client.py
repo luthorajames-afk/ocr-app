@@ -108,7 +108,7 @@ class WorkerClient(QObject):
         page: int | None = None,
         second_pass: bool = False,
         best_variant: bool = False,
-        lexicon: bool = False,
+        lexicon: bool = True,
     ) -> bool:
         if self._running:
             return False
@@ -159,8 +159,8 @@ class WorkerClient(QObject):
             arguments.append("--second-pass")
         if best_variant:
             arguments.append("--best-variant")
-        if lexicon:
-            arguments.append("--lexicon")
+        if not lexicon:
+            arguments.append("--no-lexicon")
         env = QProcessEnvironment.systemEnvironment()
         src = str(Path(__file__).resolve().parents[3] / "src")
         existing = env.value("PYTHONPATH")
