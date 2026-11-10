@@ -102,9 +102,19 @@ def test_multi_page_navigation_zoom_and_detach(window, qtbot) -> None:
 
     window.preview.detach_btn.click()
     assert window.preview._detached is not None
+    assert window.preview._detached.parent() is None  # fenêtre autonome
+    assert window.preview.compare.isVisible() is False  # l'original remplit l'espace
+    assert window.preview.compare_btn.isEnabled() is False
     assert window.preview._detached.browser.toPlainText().strip()
-    window.preview.detach_btn.click()
+
+    # Déplacement libre (autre écran) : la fenêtre est de premier niveau.
+    window.preview._detached.move(120, 90)
+    assert window.preview._detached.pos().x() == 120
+
+    # Fermeture par la croix : ré-épinglage automatique.
+    window.preview._detached.close()
     assert window.preview._detached is None
+    assert window.preview.compare.isVisible() is True
 
 
 def test_rendered_columns_are_side_by_side(qtbot) -> None:

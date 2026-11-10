@@ -214,6 +214,7 @@ class PreviewPanel(QWidget):
         self._total = 1
         self._html = "<p style='color:#68707d'>Résultat en attente…</p>"
         self._detached: ComparisonWindow | None = None
+        self._pinning = False
         self.prev_btn.clicked.connect(lambda: self.page_requested.emit(self._page - 1))
         self.next_btn.clicked.connect(lambda: self.page_requested.emit(self._page + 1))
         self.zoom_in_btn.clicked.connect(self.zoom_in)
@@ -278,14 +279,33 @@ class PreviewPanel(QWidget):
     # ---------------------------------------------------- comparaison détachée
     def detach_comparison(self) -> None:
         if self._detached is None:
-            self._detached = ComparisonWindow(self)
-            self._detached.set_html(self._html)
-            self._detached.show()
+            window = ComparisonWindow(None)  # fenêtre autonome (multi-écrans)
+            window.finished.connect(lambda _code: self._on_detached_closed())
+            window.set_html(self._html)
+            window.show()
+            self._detached = window
+            # Le preview original occupe tout l'espace laissé vacant.
+            self.compare.setVisible(False)
+            self.compare_btn.setEnabled(False)
             self.detach_btn.setText("Épingler")
         else:
+            self._pinning = True
             self._detached.close()
+            self._pinning = False
             self._detached = None
-            self.detach_btn.setText("Détacher")
+            self._restore_inline_compare()
+
+    def _on_detached_closed(self) -> None:
+        """Fermeture de la fenêtre détachée (croix) : on ré-épingle."""
+        if self._pinning or self._detached is None:
+            return
+        self._detached = None
+        self._restore_inline_compare()
+
+    def _restore_inline_compare(self) -> None:
+        self.compare_btn.setEnabled(True)
+        self.compare.setVisible(self.compare_btn.isChecked())
+        self.detach_btn.setText("Détacher")
 
 class ResultsPanel(QTabWidget):
     text_edited = Signal(str)

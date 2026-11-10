@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QDialog, QTextBrowser, QVBoxLayout, QWidget
 
@@ -10,12 +10,17 @@ from core.gui import theme
 
 
 class ComparisonWindow(QDialog):
-    """Résultat OCR dans une fenêtre séparée (lecture confortable)."""
+    """Résultat OCR dans une fenêtre autonome (déplaçable, multi-écrans)."""
+
+    closed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("AOCRI — Résultat (comparaison)")
         self.resize(640, 900)
+        # Fenêtre de premier niveau : déplaçable librement (autre écran).
+        self.setWindowFlag(Qt.WindowType.Window, True)
+        self.setModal(False)
         self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
         self.browser = QTextBrowser(self)
         layout = QVBoxLayout(self)

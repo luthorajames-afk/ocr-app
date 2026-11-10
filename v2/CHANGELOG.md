@@ -91,7 +91,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - Navigation multi-pages : signal page_requested connecté (‹ ›), pages
   non encore traitées signalées.
 - Aperçu : zoom − / + / Ajuster, déplacement à la souris (ScrollHandDrag),
-  comparaison détachable dans une fenêtre autonome (« Détacher / Épingler »).
+  comparaison détachable dans une fenêtre autonome (« Détacher / Épingler ») :
+  fenêtre de premier niveau déplaçable (multi-écrans), aperçu original étendu
+  à tout l'espace vacant, ré-épinglage automatique à la fermeture.
 - Réglages : dialogue regroupant DPI (150/200/300), thème, langue du
   document (relance l'OCR si changée) et « À propos » ; QSettings persistant.
 - Worker : option `--lang` transmise au moteur (fra/eng/fra+eng).
