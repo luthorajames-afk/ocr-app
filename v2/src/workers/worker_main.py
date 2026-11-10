@@ -60,12 +60,16 @@ class Worker:
         dpi: int = 300,
         resume_existing: bool = True,
         mode: str = "simple",
+        second_pass: bool = False,
+        lexicon: bool = False,
     ) -> None:
         self.input_path = input_path
         self.work_dir = work_dir
         self.dpi = max(72, min(int(dpi), 300))
         self._resume_existing = resume_existing
         self.mode = mode
+        self.second_pass = second_pass
+        self.lexicon = lexicon
         self._pause = threading.Event()
         self._cancel = threading.Event()
         self._done = threading.Event()
@@ -125,6 +129,19 @@ class Worker:
                         if not self._checkpoint(page.number, total, "ocr"):
                             break
                         result = engine.process(page.image)
+                        if self.second_pass and hasattr(engine, "process_region"):
+                            from dataclasses import replace as dc_replace
+
+                            from core.pipeline.second_pass import apply_second_pass
+
+                            report = apply_second_pass(page.image, result, engine)
+                            result = report.result
+                        if self.lexicon:
+                            from dataclasses import replace as dc_replace
+
+                            from core.pipeline.lexicon import correct_text
+
+                            result = dc_replace(result, text=correct_text(result.text).text)
                         text = result.text
                         duration = result.duration_ms
                         blocks = [
@@ -186,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--dpi", type=int, default=300)
     parser.add_argument("--mode", choices=("simple", "medium"), default="simple")
+    parser.add_argument("--second-pass", action="store_true", help="re-OCR des lignes sous confiance")
+    parser.add_argument("--lexicon", action="store_true", help="post-correction lexique (références intactes)")
     parser.add_argument("--no-resume", action="store_true", help="ignorer les pages déjà sauvegardées")
     args = parser.parse_args(argv)
 
@@ -196,7 +215,13 @@ def main(argv: list[str] | None = None) -> int:
     _preload(args.mode)
     work_dir = Path(args.work_dir)
     worker = Worker(
-        input_path, work_dir, dpi=args.dpi, resume_existing=not args.no_resume, mode=args.mode
+        input_path,
+        work_dir,
+        dpi=args.dpi,
+        resume_existing=not args.no_resume,
+        mode=args.mode,
+        second_pass=args.second_pass,
+        lexicon=args.lexicon,
     )
 
     try:

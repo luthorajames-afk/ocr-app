@@ -59,6 +59,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - Correctif Windows : préchargement des DLL (pypdfium2/numpy/rapidocr) dans
   le thread principal du worker avant la lecture stdin — évite le blocage
   du chargeur DLL (même classe que Docling v1).
+- T2.4/T2.5 branchés dans le worker : `--second-pass` et `--lexicon`
+  (options opt-in) ; correctif TSV Tesseract (`GetTSVText(0)`) — les
+  blocs par ligne et la confiance sont désormais réellement extraits.
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 

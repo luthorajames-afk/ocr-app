@@ -127,14 +127,14 @@ class TesseractEngine(OcrEngine):
         assert self._api is not None
         scale = 72.0 / 300.0  # bboxes en points pour une page rendue à 300 DPI
         try:
-            raw = self._api.GetTSVText()
+            raw = self._api.GetTSVText(0)
         except Exception:  # noqa: BLE001 — moteur sans TSV
             return []
         if isinstance(raw, bytes):
             raw = raw.decode("utf-8", errors="replace")
 
         lines: dict[tuple[str, str, str, str], dict[str, float | str]] = {}
-        for row in (raw or "").splitlines()[1:]:
+        for row in (raw or "").splitlines():
             parts = row.split("\t")
             if len(parts) < 12 or parts[0] != "5":  # niveau mot
                 continue

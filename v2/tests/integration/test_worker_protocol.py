@@ -153,6 +153,57 @@ def test_cancel_stops_quickly(tmp_path: Path) -> None:
         driver.close()
 
 
+def test_second_pass_and_lexicon_flags_produce_page(tmp_path: Path) -> None:
+    """T2.4/T2.5 branchés dans le worker : options acceptées, page produite."""
+    entry = BY_ID["scan_001"]
+    work = tmp_path / "flags éàç"
+    env = _env()
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-u",
+            "-m",
+            "workers.worker_main",
+            "--input",
+            str(DATA / entry["document"]),
+            "--work-dir",
+            str(work),
+            "--dpi",
+            "150",
+            "--second-pass",
+            "--lexicon",
+        ],
+        cwd=V2_ROOT,
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+    )
+    assert process.stdin is not None
+    process.stdin.write('{"type":"command","action":"start"}\n')
+    process.stdin.flush()
+    deadline = time.time() + 240
+    line = ""
+    assert process.stdout is not None
+    while time.time() < deadline:
+        line = process.stdout.readline()
+        if not line:
+            break
+        if '"page_done"' in line:
+            break
+    process.stdin.close()
+    try:
+        process.wait(timeout=30)
+    finally:
+        if process.poll() is None:
+            process.kill()
+    assert '"page_done"' in line, f"aucun page_done (dernière ligne: {line!r})"
+    data = json.loads((work / "page_001.json").read_text(encoding="utf-8"))
+    assert data["text"].strip()
+
+
 def test_resume_skips_already_saved_pages(tmp_path: Path) -> None:
     entry = BY_ID["fact_001"]
     work = tmp_path / "resume éàç"
