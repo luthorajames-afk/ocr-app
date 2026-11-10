@@ -501,13 +501,14 @@ class MainWindow(QMainWindow):
         self.center_split.setStretchFactor(1, 2)
         self._results_sizes = [520, 260]
         center_layout.addWidget(self.center_split)
-        splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        splitter.addWidget(self.sidebar)
-        splitter.addWidget(center)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([300, 980])
-        self.setCentralWidget(splitter)
+        self.main_split = QSplitter(Qt.Orientation.Horizontal, self)
+        self.main_split.addWidget(self.sidebar)
+        self.main_split.addWidget(center)
+        self.main_split.setStretchFactor(0, 0)
+        self.main_split.setStretchFactor(1, 1)
+        self.main_split.setSizes([300, 980])
+        self._sidebar_sizes = [300, 980]
+        self.setCentralWidget(self.main_split)
 
         self.bottom = BottomBar(self)
         status = QWidget(self)
@@ -547,11 +548,17 @@ class MainWindow(QMainWindow):
             group_layout.addWidget(button)
             self._modes[key] = button
         self._update_mode_availability()
+        self.sidebar_btn = QPushButton("◀", bar)
+        self.sidebar_btn.setFixedWidth(30)
+        self.sidebar_btn.setToolTip("Replier / déplier le bloc des tâches")
+        self.sidebar_btn.clicked.connect(self._toggle_sidebar)
         add = QPushButton("Fichiers", bar)
         self.results_btn = QPushButton("Résultat ▾", bar)
         self.results_btn.setToolTip("Replier / déplier le bloc Rendu / HTML / Texte brut")
         self.results_btn.clicked.connect(self._toggle_results)
-        settings = QPushButton("Réglages…", bar)
+        settings = QPushButton("⚙", bar)
+        settings.setFixedWidth(34)
+        settings.setToolTip("Réglages : échantillonnage, thème, langue")
         settings.clicked.connect(self._open_settings)
         calibrate = QPushButton("Étalonnage…", bar)
         calibrate.clicked.connect(self._open_calibration)
@@ -561,15 +568,16 @@ class MainWindow(QMainWindow):
         scan.setToolTip("Aucun scanner détecté (WIA/TWAIN/eSCL)")
         info = QLabel(f"Tesseract · DPI 300 · v{APP_VERSION}", bar)
         info.setObjectName("Muted")
+        layout.addWidget(self.sidebar_btn)
         layout.addWidget(group)
         layout.addWidget(add)
         layout.addWidget(self.results_btn)
-        layout.addWidget(settings)
         self.calibrate_btn = calibrate
         layout.addWidget(calibrate)
         layout.addWidget(scan)
         layout.addStretch(1)
         layout.addWidget(info)
+        layout.addWidget(settings)  # icône à l'extrême droite
         self.setMenuWidget(bar)
         return bar
 
@@ -754,6 +762,19 @@ class MainWindow(QMainWindow):
                 continue
         if records:
             put_on_clipboard(document_payload(records))
+
+    def _toggle_sidebar(self) -> None:
+        """Replie/déplie le bloc des tâches (flèche ◀ / ▶)."""
+        if self.sidebar.isVisible():
+            self._sidebar_sizes = self.main_split.sizes()
+            self.sidebar.setVisible(False)
+            self.sidebar_btn.setText("▶")
+            self.preview.fit_page()
+        else:
+            self.sidebar.setVisible(True)
+            self.sidebar_btn.setText("◀")
+            self.main_split.setSizes(self._sidebar_sizes)
+            self.preview.fit_page()
 
     def _toggle_results(self) -> None:
         """Replie/déplie le bloc du bas (Rendu / Markdown-HTML / Texte brut)."""

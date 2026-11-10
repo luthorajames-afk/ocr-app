@@ -100,6 +100,17 @@ def test_multi_page_navigation_zoom_and_detach(window, qtbot) -> None:
     assert window.preview.view.transform().m11() > scale_before
     window.preview.fit_btn.click()
 
+    # Replier / Déplier le bloc des tâches (flèche ◀ / ▶).
+    assert window.sidebar.isVisible()
+    sidebar_sizes = window.main_split.sizes()
+    window.sidebar_btn.click()
+    assert window.sidebar.isVisible() is False
+    assert window.sidebar_btn.text() == "▶"
+    window.sidebar_btn.click()
+    assert window.sidebar.isVisible() is True
+    assert window.sidebar_btn.text() == "◀"
+    assert window.main_split.sizes() == sidebar_sizes
+
     # Replier / Déplier le bloc du bas (Rendu / HTML / Texte brut).
     assert window.results.isVisible()
     sizes_before = window.center_split.sizes()

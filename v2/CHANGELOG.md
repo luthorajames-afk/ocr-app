@@ -97,6 +97,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - Bloc du bas (Rendu / Markdown-HTML / Texte brut) repliable via le bouton
   « Résultat ▾ / ▴ » de la barre d'outils : splitter vertical mémorisé,
   l'aperçu original occupe l'espace libéré.
+- Bloc des tâches repliable : flèche ◀ / ▶ dans la barre d'outils, splitter
+  horizontal mémorisé ; bouton Réglages remplacé par une icône ⚙ à l'extrême
+  droite de la barre.
 - Réglages : dialogue regroupant DPI (150/200/300), thème, langue du
   document (relance l'OCR si changée) et « À propos » ; QSettings persistant.
 - Worker : option `--lang` transmise au moteur (fra/eng/fra+eng).
