@@ -52,6 +52,14 @@ def page_payload(record: dict[str, Any], *, page_number: int | None = None) -> C
             html_parts.append(f"<p>{escape(line)}</p>")
             plain_parts.append(line)
 
+    for block in record.get("blocks", []) or []:
+        if not isinstance(block, dict) or block.get("kind") != "table":
+            continue
+        grid = block.get("grid")
+        if isinstance(grid, list) and grid:
+            html_parts.append(_table_html(grid))
+            markdown_parts.extend(["", _table_markdown(grid)])
+
     for table in record.get("tables", []) or []:
         grid = table.get("grid") if isinstance(table, dict) else None
         if isinstance(grid, list) and grid:

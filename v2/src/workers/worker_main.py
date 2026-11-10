@@ -137,6 +137,7 @@ class Worker:
                                 "bbox": list(block.bbox),
                                 "confidence": block.confidence,
                                 "kind": block.kind,
+                                "grid": [list(row) for row in block.grid],
                             }
                             for block in page.blocks
                         ]
@@ -162,6 +163,16 @@ class Worker:
                             from core.pipeline.lexicon import correct_text
 
                             result = dc_replace(result, text=correct_text(result.text).text)
+                        from dataclasses import replace as dc_replace
+
+                        from core.pipeline.layout import order_blocks_in_columns
+
+                        ordered = order_blocks_in_columns(result.blocks)
+                        result = dc_replace(
+                            result,
+                            blocks=tuple(ordered),
+                            text="\n".join(block.text for block in ordered if block.text.strip()),
+                        )
                         text = result.text
                         duration = result.duration_ms
                         blocks = [
@@ -170,6 +181,7 @@ class Worker:
                                 "bbox": list(block.bbox),
                                 "confidence": block.confidence,
                                 "kind": block.kind,
+                                "grid": [list(row) for row in block.grid],
                             }
                             for block in result.blocks
                         ]

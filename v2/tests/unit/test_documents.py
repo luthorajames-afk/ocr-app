@@ -28,6 +28,26 @@ def test_native_pdf_exposes_native_text() -> None:
     assert pages[0].native_text.count("é") >= 1
 
 
+def test_native_invoice_table_is_reconstructed() -> None:
+    entry = BY_ID["fact_001"]
+    pages = load_document(DATA / entry["document"], dpi=150)
+    tables = [block for block in pages[0].blocks if block.kind == "table"]
+    assert len(tables) == 1
+    grid = tables[0].grid
+    assert len(grid) >= 4 and len(grid[0]) >= 4
+    assert grid[0][0].lower().startswith("désignation")
+
+
+def test_native_blocks_are_ordered_by_columns() -> None:
+    entry = BY_ID["fact_001"]
+    pages = load_document(DATA / entry["document"], dpi=150)
+    blocks = [block for block in pages[0].blocks if block.bbox[2] > block.bbox[0]]
+    assert blocks
+    # Ordre de lecture : la seconde colonne ne démarre jamais avant la première.
+    xs = [block.bbox[0] for block in blocks]
+    assert xs[0] <= 60
+
+
 def test_image_document_has_no_native_text() -> None:
     entry = next(e for e in MANIFEST["documents"] if e["document"].endswith(".jpg"))
     pages = load_document(DATA / entry["document"])

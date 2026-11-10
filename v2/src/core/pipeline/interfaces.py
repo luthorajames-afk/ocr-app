@@ -31,6 +31,8 @@ class OcrBlock:
     bbox: BBox
     confidence: float
     kind: str = "paragraph"
+    # Grille de tableau (kind == "table") : lignes de cellules texte.
+    grid: tuple[tuple[str, ...], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -87,6 +87,7 @@ class PreviewPanel(QWidget):
         self.info.setObjectName("Muted")
         self.prev_btn = QPushButton("‹", self)
         self.next_btn = QPushButton("›", self)
+        self.compare_btn = QPushButton("Comparer", self)
         self.prev_btn.setFixedWidth(30)
         self.next_btn.setFixedWidth(30)
         self.page_label = QLabel("", self)
@@ -98,18 +99,32 @@ class PreviewPanel(QWidget):
         head.addWidget(self.prev_btn)
         head.addWidget(self.page_label)
         head.addWidget(self.next_btn)
+        head.addWidget(self.compare_btn)
+        self.compare = QTextBrowser(self)
+        self.compare.setOpenExternalLinks(False)
+        body = QSplitter(Qt.Orientation.Horizontal, self)
+        body.addWidget(self.view)
+        body.addWidget(self.compare)
+        body.setSizes([600, 400])
         layout = QVBoxLayout(self)
         layout.addLayout(head)
-        layout.addWidget(self.view, 1)
+        layout.addWidget(body, 1)
+        self.compare_btn.setCheckable(True)
+        self.compare_btn.setChecked(True)
+        self.compare_btn.toggled.connect(self.compare.setVisible)
         self._page = 1
         self._total = 1
         self.prev_btn.clicked.connect(lambda: self.page_requested.emit(self._page - 1))
         self.next_btn.clicked.connect(lambda: self.page_requested.emit(self._page + 1))
         self.show_placeholder()
 
+    def set_result_html(self, html: str) -> None:
+        self.compare.setHtml(html)
+
     def show_placeholder(self) -> None:
         self.scene.clear()
         self.scene.addRect(0, 0, 430, 608, brush=Qt.GlobalColor.white)
+        self.compare.setHtml("<p style='color:#68707d'>Résultat en attente…</p>")
         self.info.setText("aperçu en attente")
 
     def show_page(self, task: Task, page_number: int) -> None:
@@ -186,7 +201,23 @@ class ResultsPanel(QTabWidget):
                 if current_column is None or column != current_column:
                     html_parts.append("<div style='margin-bottom:10px'>")
                     current_column = column
-                if kind == "title":
+                if kind == "table":
+                    grid = block.get("grid") or []
+                    rows_html = []
+                    for row_index, row in enumerate(grid):
+                        tag = "th" if row_index == 0 else "td"
+                        cells = "".join(
+                            f"<{tag} style='border:1px solid #c3c8d2;padding:3px 6px'>"
+                            f"{escape(str(cell))}</{tag}>"
+                            for cell in row
+                        )
+                        rows_html.append(f"<tr>{cells}</tr>")
+                    html_parts.append(
+                        "<table style='border-collapse:collapse;margin:6px 0'>"
+                        + "".join(rows_html)
+                        + "</table>"
+                    )
+                elif kind == "title":
                     html_parts.append(f"<h2 style='margin:6px 0'>{content}</h2>")
                 else:
                     html_parts.append(f"<p style='margin:2px 0'>{content}</p>")
@@ -395,6 +426,7 @@ class MainWindow(QMainWindow):
                 record = json.loads(data.read_text(encoding="utf-8"))
                 self._record_text[page] = str(record.get("text", ""))
                 self.results.show_record(record)
+                self.preview.set_result_html(self.results.rendered.toHtml())
             except (OSError, ValueError):
                 pass
 

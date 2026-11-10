@@ -87,21 +87,122 @@ def _native_blocks(page: pdfium.PdfPage, page_height: float) -> list[OcrBlock]:
     heights = sorted(rect[3] - rect[1] for rect in rects)
     median_height = heights[len(heights) // 2] if heights else 10.0
 
+    return _native_tables_and_columns(rects, page_height, median_height)
+
+
+def _cluster_columns(
+    rects: list[tuple[float, float, float, float, str]],
+) -> list[tuple[float, list[tuple[float, float, float, float, str]]]]:
+    columns: list[tuple[float, list[tuple[float, float, float, float, str]]]] = []
+    for rect in sorted(rects, key=lambda item: item[0]):
+        for column_left, column_rects in columns:
+            if abs(rect[0] - column_left) < 40.0:
+                column_rects.append(rect)
+                break
+        else:
+            columns.append((rect[0], [rect]))
+    columns.sort(key=lambda column: column[0])
+    return columns
+
+
+def _native_tables_and_columns(
+    rects: list[tuple[float, float, float, float, str]],
+    page_height: float,
+    median_height: float,
+) -> list[OcrBlock]:
+    """Blocs ordonnés ; tableaux reconstruits avant le découpage en colonnes."""
+    rows = _group_rows(rects)
+    table_groups: list[tuple[list[list[tuple[float, float, float, float, str]]], list[list[str]]]] = []
+    line_rects: list[tuple[float, float, float, float, str]] = []
+    pending_rows: list[list[tuple[float, float, float, float, str]]] = []
+    pending_cells: list[list[str]] = []
+    for row in rows:
+        if _is_tabular_row(row):
+            pending_rows.append(row)
+            pending_cells.append([cell[4] for cell in row])
+        else:
+            if pending_rows:
+                table_groups.append((pending_rows, pending_cells))
+                pending_rows, pending_cells = [], []
+            line_rects.extend(row)
+    if pending_rows:
+        table_groups.append((pending_rows, pending_cells))
+
     blocks: list[OcrBlock] = []
-    for _column_left, column_rects in columns:
-        items = sorted(column_rects, key=lambda item: -item[3])
-        for left, bottom, right, top, text in items:
-            height = top - bottom
-            is_title = height >= median_height * 1.3 and len(text) <= 90
-            blocks.append(
-                OcrBlock(
-                    text=normalize_text(text).replace("\n", " "),
-                    bbox=(left, page_height - top, right, page_height - bottom),
-                    confidence=1.0,
-                    kind="title" if is_title else "line",
+    for _column_left, column_rects in _cluster_columns(line_rects):
+        for row in _group_rows(column_rects):
+            for left, bottom, right, top, text in row:
+                height = top - bottom
+                is_title = height >= median_height * 1.3 and len(text) <= 90
+                blocks.append(
+                    OcrBlock(
+                        text=normalize_text(text).replace(chr(10), " "),
+                        bbox=(left, page_height - top, right, page_height - bottom),
+                        confidence=1.0,
+                        kind="title" if is_title else "line",
+                    )
                 )
-            )
+
+    for table_rows, table_cells in table_groups:
+        table = _table_block(table_rows, table_cells, page_height)
+        position = next(
+            (index for index, block in enumerate(blocks) if block.bbox[1] > table.bbox[1]),
+            len(blocks),
+        )
+        blocks.insert(position, table)
     return blocks
+
+
+def _group_rows(
+    rects: list[tuple[float, float, float, float, str]],
+) -> list[list[tuple[float, float, float, float, str]]]:
+    """Regroupe les rectangles par ligne (tolérance verticale ~4 pt)."""
+    rows: list[list[tuple[float, float, float, float, str]]] = []
+    for rect in sorted(rects, key=lambda item: -(item[1] + item[3]) / 2.0):
+        center = (rect[1] + rect[3]) / 2.0
+        for row in rows:
+            row_center = sum((item[1] + item[3]) / 2.0 for item in row) / len(row)
+            if abs(center - row_center) <= 4.0:
+                row.append(rect)
+                break
+        else:
+            rows.append([rect])
+    for row in rows:
+        row.sort(key=lambda item: item[0])
+    return rows
+
+
+def _is_tabular_row(row: list[tuple[float, float, float, float, str]]) -> bool:
+    """Ligne tabulaire : au moins 3 cellules et un espacement net entre elles."""
+    if len(row) < 3:
+        return False
+    gaps = [
+        row[index + 1][0] - row[index][2]
+        for index in range(len(row) - 1)
+        if row[index + 1][0] > row[index][2]
+    ]
+    return sum(1 for gap in gaps if gap >= 6.0) >= 2
+
+
+def _table_block(
+    rows: list[list[tuple[float, float, float, float, str]]],
+    cells: list[list[str]],
+    page_height: float,
+) -> OcrBlock:
+    width = max(len(row) for row in cells)
+    grid = tuple(tuple(row + [""] * (width - len(row))) for row in cells)
+    left = min(rect[0] for row in rows for rect in row)
+    right = max(rect[2] for row in rows for rect in row)
+    bottom = min(rect[1] for row in rows for rect in row)
+    top = max(rect[3] for row in rows for rect in row)
+    text = "\n".join(" | ".join(cell for cell in row) for row in grid)
+    return OcrBlock(
+        text=text,
+        bbox=(left, page_height - top, right, page_height - bottom),
+        confidence=1.0,
+        kind="table",
+        grid=grid,
+    )
 
 
 def _render_pdf_page(page: pdfium.PdfPage, dpi: int) -> Image.Image:
