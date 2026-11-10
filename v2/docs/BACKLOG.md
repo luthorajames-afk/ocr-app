@@ -32,9 +32,9 @@ Rôles : [Planificateur] → [Implémenteur] → [Testeur] → [Relecteur Sécur
 
 ## Phase 3b : Couche d'Acquisition Matérielle (Scanner Physique)
 
-- [ ] **T3b.1** Backend WIA prioritaire, thread COM dédié.
-- [ ] **T3b.2** Secours TWAIN (64 bits) et eSCL AirScan (HTTP local asynchrone).
-- [ ] **T3b.3** Lot avec détection de pages blanches (validation utilisateur, pas de suppression auto).
+- [x] **T3b.1** Backend WIA prioritaire, thread COM dédié.
+- [x] **T3b.2** Secours TWAIN (64 bits) et eSCL AirScan (HTTP local asynchrone).
+- [x] **T3b.3** Lot avec détection de pages blanches (validation utilisateur, pas de suppression auto).
 
 ## Phase 4 & 5 : Interface PySide6 & Visionneuse (mockup d'abord)
 

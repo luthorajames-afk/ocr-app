@@ -37,6 +37,12 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - T3.3 : `core/pipeline/job_store.py` — `page_schema` versionné, écriture
   atomique page par page, reprise après panne (pages déjà sauvegardées).
   Tests : 8 unitaires protocole/store + 4 intégration subprocess.
+- T3b.1/T3b.2 : `core/io/scanner.py` — backends WIA (pywin32, COM),
+  TWAIN 64 bits et eSCL ; sélection automatique WIA → TWAIN → eSCL ;
+  eSCL désactivé par défaut (étanchéité réseau, AGENTS.md §1).
+- T3b.3 : détection de pages blanches par ratio d'encre — pages
+  signalées mais jamais supprimées ; 6 tests.
+- Tests : pytest-socket activé sur toute la suite (aucun accès réseau).
 
 ## [0.1.0-alpha.0] — 2026-11-10
 
