@@ -92,6 +92,10 @@ class WorkerClient(QObject):
         dpi: int = 300,
         mode: str = "simple",
         languages: str = "fra+eng",
+        page: int | None = None,
+        second_pass: bool = False,
+        best_variant: bool = False,
+        lexicon: bool = False,
     ) -> bool:
         if self._running:
             return False
@@ -120,6 +124,14 @@ class WorkerClient(QObject):
             "--lang",
             languages,
         ]
+        if page is not None:
+            arguments += ["--page", str(page)]
+        if second_pass:
+            arguments.append("--second-pass")
+        if best_variant:
+            arguments.append("--best-variant")
+        if lexicon:
+            arguments.append("--lexicon")
         env = QProcessEnvironment.systemEnvironment()
         src = str(Path(__file__).resolve().parents[3] / "src")
         existing = env.value("PYTHONPATH")

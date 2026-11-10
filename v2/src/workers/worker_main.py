@@ -31,6 +31,13 @@ from core.pipeline.protocol import (
 )
 
 STAGES = ("render", "preprocess", "layout", "ocr", "reconstruct", "save")
+
+
+def _mean_confidence(result: object) -> float:
+    """Confiance moyenne des blocs (0 si aucun bloc)."""
+    blocks = getattr(result, "blocks", ()) or ()
+    values = [float(getattr(block, "confidence", 0.0)) for block in blocks]
+    return sum(values) / len(values) if values else 0.0
 _OUT_LOCK = threading.Lock()
 
 
@@ -67,6 +74,8 @@ class Worker:
         second_pass: bool = False,
         lexicon: bool = False,
         languages: str = "fra+eng",
+        page: int | None = None,
+        best_variant: bool = False,
     ) -> None:
         self.input_path = input_path
         self.work_dir = work_dir
@@ -77,6 +86,8 @@ class Worker:
         self.second_pass = second_pass
         self.lexicon = lexicon
         self.languages = [part for part in languages.split("+") if part] or None
+        self.page = page
+        self.best_variant = best_variant
         self._pause = threading.Event()
         self._cancel = threading.Event()
         self._done = threading.Event()
@@ -114,12 +125,17 @@ class Worker:
         try:
             # R7 : rendu page par page, une seule image en mémoire.
             total = page_count(self.input_path)
+            if self.page is not None:
+                self.page = max(1, min(int(self.page), total))
+                total = 1
             pages = iter_document_pages(self.input_path, dpi=self.dpi)
             already = saved_pages(self.work_dir) if self._resume_existing else set()
             engine = build_engine(self.mode)
             engine.initialize()
             try:
                 for page in pages:
+                    if self.page is not None and page.number != self.page:
+                        continue
                     if self._cancel.is_set():
                         break
                     if page.number in already:
@@ -159,6 +175,13 @@ class Worker:
 
                         prepared = preprocess(page.image)
                         result = engine.process(prepared.image, languages=self.languages)
+                        if self.best_variant:
+                            # Compare brut vs prétraité : garde la meilleure confiance.
+                            raw_result = engine.process(page.image, languages=self.languages)
+                            prepared_conf = _mean_confidence(result)
+                            raw_conf = _mean_confidence(raw_result)
+                            if raw_conf > prepared_conf + 0.02:
+                                result = raw_result
                         if self.second_pass and hasattr(engine, "process_region"):
                             from dataclasses import replace as dc_replace
 
@@ -255,6 +278,10 @@ def main(argv: list[str] | None = None) -> int:
         "--mode", choices=("simple", "medium", "advanced", "approfondi"), default="simple"
     )
     parser.add_argument("--lang", default="fra+eng", help="langues OCR (ex. fra+eng)")
+    parser.add_argument("--page", type=int, default=None, help="traiter une seule page (1-based)")
+    parser.add_argument(
+        "--best-variant", action="store_true", help="choisir le meilleur pretraitement par page"
+    )
     parser.add_argument("--second-pass", action="store_true", help="re-OCR des lignes sous confiance")
     parser.add_argument("--lexicon", action="store_true", help="post-correction lexique (références intactes)")
     parser.add_argument("--no-resume", action="store_true", help="ignorer les pages déjà sauvegardées")
@@ -276,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
         second_pass=args.second_pass,
         lexicon=args.lexicon,
         languages=args.lang,
+        page=args.page,
+        best_variant=args.best_variant,
     )
 
     try:

@@ -51,6 +51,43 @@ def test_calibration_handles_missing_reference() -> None:
     assert report.cer == 1.0
 
 
+def test_correction_dialog_saves_edits(tmp_path: Path, qtbot) -> None:
+    """Correction OCR : édition des blocs puis sauvegarde atomique."""
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    from core.gui.correction_dialog import CorrectionDialog
+
+    QApplication.instance() or QApplication([])
+    work = tmp_path / "correction éàç"
+    work.mkdir()
+    (work / "page_001.json").write_text(
+        json.dumps(
+            {
+                "page": 1,
+                "text": "décrel",
+                "blocks": [
+                    {"text": "décrel", "bbox": [0, 0, 10, 10], "confidence": 0.3, "kind": "line"}
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    dialog = CorrectionDialog(work, 1)
+    qtbot.addWidget(dialog)
+    assert dialog.table.rowCount() == 1
+    dialog.table.item(0, 2).setText("décret")
+    detected: list[tuple[bool, bool]] = []
+    dialog.reprocess_requested.connect(lambda a, b: detected.append((a, b)))
+    dialog.save_corrections()
+    data = json.loads((work / "page_001.json").read_text(encoding="utf-8"))
+    assert data["text"] == "décret"
+    dialog._request_reprocess()
+    assert detected and detected[0] == (True, True)
+    dialog.close()
+
+
 def test_dialog_computes_report(tmp_path: Path, qtbot) -> None:
     pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication

@@ -34,7 +34,9 @@ from PySide6.QtWidgets import (
 
 from core.gui import theme
 from core.gui.comparison_window import ComparisonWindow
+from core.gui.correction_dialog import CorrectionDialog
 from core.gui.task_runner import Task, TaskRunner, TaskStatus
+from core.gui.worker_client import WorkerClient
 from core.metadata import APP_VERSION
 
 MODES = (
@@ -488,6 +490,7 @@ class MainWindow(QMainWindow):
         self._edit_timer.setInterval(400)
         self._edit_timer.timeout.connect(self._commit_edit)
         self._pending_edit: str | None = None
+        self._improve_client: WorkerClient | None = None
 
         self._modes: dict[str, QPushButton] = {}
         self._toolbar = self._build_toolbar()
@@ -565,6 +568,9 @@ class MainWindow(QMainWindow):
         settings.setFixedWidth(34)
         settings.setToolTip("Réglages : échantillonnage, thème, langue")
         settings.clicked.connect(self._open_settings)
+        self.correct_btn = QPushButton("Corriger…", bar)
+        self.correct_btn.setToolTip("Corriger les blocs OCR / relancer la page")
+        self.correct_btn.clicked.connect(self._open_correction)
         calibrate = QPushButton("Étalonnage…", bar)
         calibrate.clicked.connect(self._open_calibration)
         add.clicked.connect(self._pick_files)
@@ -577,6 +583,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(group)
         layout.addWidget(add)
         layout.addWidget(self.results_btn)
+        layout.addWidget(self.correct_btn)
         self.calibrate_btn = calibrate
         layout.addWidget(calibrate)
         layout.addWidget(scan)
@@ -822,6 +829,63 @@ class MainWindow(QMainWindow):
         # Changement de langue : relance l'OCR du document courant.
         if self._languages != previous_language and self._current_task is not None:
             self.add_file(self._current_task.source_path)
+
+    def _open_correction(self) -> None:
+        """Correction OCR directe : blocs faibles, édition, relance ciblée."""
+        task = self._current_task
+        if task is None or not self._active_page:
+            self.bottom.label.setText("Correction : aucune page traitée")
+            return
+        dialog = CorrectionDialog(task.work_dir, self._active_page, self)
+        dialog.saved.connect(lambda: self._reload_active_page())
+        dialog.reprocess_requested.connect(
+            lambda second, best: self._reprocess_page(task, self._active_page, second, best)
+        )
+        dialog.exec()
+
+    def _reload_active_page(self) -> None:
+        task = self._current_task
+        if task is not None and self._active_page:
+            self._show_page(task, self._active_page)
+
+    def _reprocess_page(
+        self, task: Task, page: int, second_pass: bool, best_variant: bool
+    ) -> None:
+        """Relance l'OCR d'UNE page avec les options choisies (sous-processus, R2)."""
+        if self._improve_client is not None and self._improve_client.is_running:
+            self.bottom.label.setText("Une amélioration est déjà en cours")
+            return
+        client = WorkerClient(self)
+        self._improve_client = client
+        self.correct_btn.setEnabled(False)
+        self.bottom.label.setText(f"Amélioration de la page {page}…")
+
+        def on_done(done_page: int, _path: str) -> None:
+            self.bottom.label.setText(f"Page {done_page} améliorée")
+            self._show_page(task, done_page)
+            self.correct_btn.setEnabled(True)
+
+        def on_error(message: str) -> None:
+            self.bottom.label.setText(f"Erreur : {message}")
+            self.correct_btn.setEnabled(True)
+
+        def on_finished(_code: int) -> None:
+            self._improve_client = None
+            self.correct_btn.setEnabled(True)
+
+        client.page_done.connect(on_done)
+        client.error.connect(on_error)
+        client.finished.connect(on_finished)
+        client.start(
+            task.source_path,
+            task.work_dir,
+            dpi=self._dpi,
+            mode=task.mode,
+            languages=self._languages,
+            page=page,
+            second_pass=second_pass,
+            best_variant=best_variant,
+        )
 
     def _open_calibration(self) -> None:
         from core.gui.calibration_dialog import CalibrationDialog

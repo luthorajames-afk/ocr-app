@@ -134,6 +134,54 @@ def test_worker_creates_missing_work_dir(tmp_path: Path) -> None:
         driver.close()
 
 
+def test_worker_page_option_processes_single_page(tmp_path: Path) -> None:
+    """--page N : une seule page traitée, sans toucher aux autres."""
+    entry = BY_ID["fact_009"]
+    work = tmp_path / "page unique éàç"
+    env = _env()
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-u",
+            "-m",
+            "workers.worker_main",
+            "--input",
+            str(DATA / entry["document"]),
+            "--work-dir",
+            str(work),
+            "--dpi",
+            "150",
+            "--page",
+            "2",
+        ],
+        cwd=V2_ROOT,
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+    )
+    assert process.stdin is not None and process.stdout is not None
+    process.stdin.write('{"type":"command","action":"start"}\n')
+    process.stdin.flush()
+    line = ""
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        line = process.stdout.readline()
+        if not line or '"page_done"' in line:
+            break
+    process.stdin.close()
+    try:
+        process.wait(timeout=30)
+    finally:
+        if process.poll() is None:
+            process.kill()
+    assert json.loads(line)["page"] == 2
+    assert (work / "page_002.json").is_file()
+    assert not (work / "page_001.json").exists()
+
+
 def test_pause_freezes_progress_then_resume(tmp_path: Path) -> None:
     entry = BY_ID["fact_001"]
     driver = WorkerDriver(tmp_path / "pause éàç", DATA / entry["document"])
