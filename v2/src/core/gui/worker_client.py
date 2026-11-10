@@ -22,6 +22,25 @@ from core.pipeline.protocol import (
 )
 
 
+def medium_python() -> str:
+    """Interpréteur du module Moyen : venv dédié (R13), sinon noyau."""
+    override = os.environ.get("AOCRI_MEDIUM_VENV")
+    candidates: list[Path] = []
+    if override:
+        base = Path(override)
+        candidates.append(base / "Scripts" / "python.exe" if base.is_dir() else base)
+    root = Path(__file__).resolve().parents[3]
+    candidates.append(root.parent / "ocr_app" / ".venv-eval-medium" / "Scripts" / "python.exe")
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return sys.executable
+
+
+def medium_available() -> bool:
+    return Path(medium_python()).resolve() != Path(sys.executable).resolve()
+
+
 class WorkerClient(QObject):
     """Un sous-processus worker par document (R5 : vivant tout le long)."""
 
@@ -45,11 +64,17 @@ class WorkerClient(QObject):
     def is_running(self) -> bool:
         return self._running
 
-    def start(self, input_path: str | Path, work_dir: str | Path, dpi: int = 300) -> bool:
+    def start(
+        self,
+        input_path: str | Path,
+        work_dir: str | Path,
+        dpi: int = 300,
+        mode: str = "simple",
+    ) -> bool:
         if self._running:
             return False
         self._buffer = ""
-        program = sys.executable
+        program = medium_python() if mode == "medium" else sys.executable
         arguments = [
             "-u",
             "-m",
@@ -60,6 +85,8 @@ class WorkerClient(QObject):
             str(work_dir),
             "--dpi",
             str(dpi),
+            "--mode",
+            mode,
         ]
         env = QProcessEnvironment.systemEnvironment()
         src = str(Path(__file__).resolve().parents[3] / "src")

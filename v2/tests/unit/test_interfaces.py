@@ -38,6 +38,10 @@ class _FakeEngine(OcrEngine):
     def is_initialized(self) -> bool:
         return self._initialized
 
+    @property
+    def version(self) -> str:
+        return "0"
+
     def initialize(self) -> None:
         self._initialized = True
 

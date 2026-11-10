@@ -51,6 +51,14 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - T6.1 : `core/io/clipboard.py` + `core/gui/clipboard_qt.py` — presse-papiers
   riche text/plain + text/html (tableaux) + text/markdown, échappement
   HTML systématique ; bouton Copier câblé ; 6 tests.
+- T5.2 complément : édition du texte avant copie (R9) — sauvegarde atomique
+  du `page_NNN.json`, marqueur « ● » dans le titre, test dédié.
+- Module Moyen réel : `workers/medium/engine.py` (RapidOCR 3.10, venv 3.12
+  dédié via `AOCRI_MEDIUM_VENV` ou `.venv-eval-medium`), bouton Moyen
+  activé seulement si l'environnement existe ; test d'intégration réel.
+- Correctif Windows : préchargement des DLL (pypdfium2/numpy/rapidocr) dans
+  le thread principal du worker avant la lecture stdin — évite le blocage
+  du chargeur DLL (même classe que Docling v1).
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 

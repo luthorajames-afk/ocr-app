@@ -87,6 +87,11 @@ class OcrEngine(ABC):
     def is_initialized(self) -> bool:
         """Vrai après ``initialize()`` et avant ``shutdown()``."""
 
+    @property
+    @abstractmethod
+    def version(self) -> str:
+        """Version du moteur sous-jacent (tracée dans chaque page)."""
+
     @abstractmethod
     def initialize(self) -> None:
         """Charge modèles et ressources (une seule fois par processus, R5)."""

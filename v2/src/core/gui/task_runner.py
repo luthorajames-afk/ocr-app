@@ -89,7 +89,7 @@ class TaskRunner(QObject):
         task.status = TaskStatus.RUNNING
         self._current = task
         self._emit(task)
-        if not self._client.start(task.source_path, task.work_dir):
+        if not self._client.start(task.source_path, task.work_dir, mode=task.mode):
             task.status = TaskStatus.ERROR
             task.error = "worker indisponible"
             self._current = None

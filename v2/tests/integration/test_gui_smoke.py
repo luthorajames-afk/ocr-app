@@ -41,10 +41,17 @@ def test_window_title_and_modes(window) -> None:
 
 
 def test_mode_selection_updates_state(window) -> None:
-    window._modes["advanced"].click()
-    assert window._mode == "advanced"
-    assert window._modes["advanced"].isChecked()
-    assert not window._modes["simple"].isChecked()
+    # Les modes optionnels sont grisés quand leur environnement manque.
+    assert not window._modes["advanced"].isEnabled()
+    assert not window._modes["approfondi"].isEnabled()
+    if window._modes["medium"].isEnabled():
+        window._modes["medium"].click()
+        assert window._mode == "medium"
+        assert window._modes["medium"].isChecked()
+        assert not window._modes["simple"].isChecked()
+    else:
+        window._modes["simple"].click()
+        assert window._mode == "simple"
 
 
 def test_add_file_starts_task_and_shows_result(window, qtbot) -> None:
@@ -71,6 +78,20 @@ def test_worker_client_protocol_messages(qtbot, tmp_path) -> None:
     qtbot.waitUntil(lambda: bool(done), timeout=120_000)
     assert any(stage == "ocr" for _p, _t, stage in progresses)
     client.stop()
+
+
+def test_edit_text_persists_and_marks_dirty(window, qtbot) -> None:
+    """R9 — édition avant copie : sauvegarde page + marqueur « ● »."""
+    entry = BY_ID["fact_001"]
+    assert window.add_file(str(DATA / entry["document"]))
+    task = window._current_task
+    qtbot.waitUntil(lambda: task.status.value == "done", timeout=120_000)
+    window.results.plain.setPlainText("TEXTE ÉDITÉ éàç")
+    qtbot.waitUntil(lambda: "●" in window.windowTitle(), timeout=5_000)
+    record = json.loads(
+        (Path(task.work_dir) / "page_001.json").read_text(encoding="utf-8")
+    )
+    assert record["text"] == "TEXTE ÉDITÉ éàç"
 
 
 def test_export_writes_text(window, qtbot, tmp_path, monkeypatch) -> None:

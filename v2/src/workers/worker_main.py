@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 from core.pipeline.documents import load_document
+from core.pipeline.interfaces import OcrEngine
 from core.pipeline.job_store import PageRecord, save_page, saved_pages
 from core.pipeline.protocol import (
     CommandMessage,
@@ -28,7 +29,6 @@ from core.pipeline.protocol import (
     dumps,
     parse_line,
 )
-from core.pipeline.tesseract_engine import TesseractEngine
 
 STAGES = ("render", "preprocess", "layout", "ocr", "reconstruct", "save")
 _OUT_LOCK = threading.Lock()
@@ -41,6 +41,17 @@ def emit(message: ProgressMessage | PageDoneMessage | ErrorMessage | CommandMess
         sys.stdout.flush()
 
 
+def build_engine(mode: str) -> OcrEngine:
+    """Fabrique de moteur : imports paresseux (R1/R13)."""
+    if mode == "medium":
+        from workers.medium.engine import RapidOcrEngine
+
+        return RapidOcrEngine()
+    from core.pipeline.tesseract_engine import TesseractEngine
+
+    return TesseractEngine()
+
+
 class Worker:
     def __init__(
         self,
@@ -48,11 +59,13 @@ class Worker:
         work_dir: Path,
         dpi: int = 300,
         resume_existing: bool = True,
+        mode: str = "simple",
     ) -> None:
         self.input_path = input_path
         self.work_dir = work_dir
         self.dpi = max(72, min(int(dpi), 300))
         self._resume_existing = resume_existing
+        self.mode = mode
         self._pause = threading.Event()
         self._cancel = threading.Event()
         self._done = threading.Event()
@@ -91,7 +104,7 @@ class Worker:
             pages = load_document(self.input_path, dpi=self.dpi)
             total = len(pages)
             already = saved_pages(self.work_dir) if self._resume_existing else set()
-            engine = TesseractEngine()
+            engine = build_engine(self.mode)
             engine.initialize()
             try:
                 for page in pages:
@@ -152,11 +165,27 @@ class Worker:
             self._done.set()
 
 
+def _preload(mode: str) -> None:
+    """Précharge les DLL avant la lecture stdin (verrou du loader Windows).
+
+    Même classe de bug que Docling en v1 : importer pypdfium2/onnxruntime
+    depuis un thread pendant qu'un autre thread lit stdin peut bloquer le
+    chargeur DLL. Le préchargement dans le thread principal l'évite.
+    """
+    import numpy  # noqa: F401
+    import PIL.Image  # noqa: F401
+    import pypdfium2  # noqa: F401
+
+    if mode == "medium":
+        import rapidocr  # noqa: F401
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="worker_main", description="AOCRI v2 worker")
     parser.add_argument("--input", required=True, help="PDF/JPG/PNG")
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--dpi", type=int, default=300)
+    parser.add_argument("--mode", choices=("simple", "medium"), default="simple")
     parser.add_argument("--no-resume", action="store_true", help="ignorer les pages déjà sauvegardées")
     args = parser.parse_args(argv)
 
@@ -164,8 +193,11 @@ def main(argv: list[str] | None = None) -> int:
     if not input_path.is_file():
         emit(ErrorMessage(page=0, message=f"document introuvable : {input_path}"))
         return 1
+    _preload(args.mode)
     work_dir = Path(args.work_dir)
-    worker = Worker(input_path, work_dir, dpi=args.dpi, resume_existing=not args.no_resume)
+    worker = Worker(
+        input_path, work_dir, dpi=args.dpi, resume_existing=not args.no_resume, mode=args.mode
+    )
 
     try:
         for line in sys.stdin:

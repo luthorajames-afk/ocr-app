@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -118,17 +118,25 @@ class PreviewPanel(QWidget):
 
 
 class ResultsPanel(QTabWidget):
+    text_edited = Signal(str)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.rendered = QTextBrowser(self)
         self.markup = QPlainTextEdit(self)
         self.markup.setReadOnly(True)
         self.plain = QPlainTextEdit(self)
+        self.plain.setPlaceholderText(
+            "Texte OCR — éditable avant copie (Ctrl+Z / Ctrl+Y), enregistré par page."
+        )
+        self._loading = False
+        self.plain.textChanged.connect(self._on_plain_changed)
         self.addTab(self.rendered, "Rendu")
         self.addTab(self.markup, "Markdown / HTML")
         self.addTab(self.plain, "Texte brut")
 
     def show_record(self, record: dict[str, object]) -> None:
+        self._loading = True
         text = str(record.get("text", ""))
         self.plain.setPlainText(text)
         self.markup.setPlainText(text)
@@ -136,6 +144,11 @@ class ResultsPanel(QTabWidget):
             f"<p>{line}</p>" for line in text.splitlines() if line.strip()
         )
         self.rendered.setHtml(paragraphs or "<p>[page vide]</p>")
+        self._loading = False
+
+    def _on_plain_changed(self) -> None:
+        if not self._loading:
+            self.text_edited.emit(self.plain.toPlainText())
 
 
 class BottomBar(QWidget):
@@ -172,6 +185,13 @@ class MainWindow(QMainWindow):
         self._runner = TaskRunner(self)
         self._current_task: Task | None = None
         self._last_page = 0
+        self._active_page = 0
+        self._record_text: dict[int, str] = {}
+        self._edit_timer = QTimer(self)
+        self._edit_timer.setSingleShot(True)
+        self._edit_timer.setInterval(400)
+        self._edit_timer.timeout.connect(self._commit_edit)
+        self._pending_edit: str | None = None
 
         self._modes: dict[str, QPushButton] = {}
         self._toolbar = self._build_toolbar()
@@ -207,6 +227,7 @@ class MainWindow(QMainWindow):
 
         self._runner.task_changed.connect(self._on_task_changed)
         self._runner.page_ready.connect(self._on_page_ready)
+        self.results.text_edited.connect(self._on_text_edited)
         self._runner.all_done.connect(self._on_all_done)
         QTimer.singleShot(0, self._update_buttons)
 
@@ -227,6 +248,7 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda _checked, k=key: self._set_mode(k))
             group_layout.addWidget(button)
             self._modes[key] = button
+        self._update_mode_availability()
         add = QPushButton("Fichiers", bar)
         add.clicked.connect(self._pick_files)
         scan = QPushButton("Scanner…", bar)
@@ -241,6 +263,25 @@ class MainWindow(QMainWindow):
         layout.addWidget(info)
         self.setMenuWidget(bar)
         return bar
+
+    def _update_mode_availability(self) -> None:
+        """Modes optionnels grisés si leur environnement n'est pas installé."""
+        from core.gui.worker_client import medium_available
+
+        medium = self._modes.get("medium")
+        if medium is not None:
+            available = medium_available()
+            medium.setEnabled(available)
+            medium.setToolTip(
+                "RapidOCR dans son environnement dédié"
+                if available
+                else "Module Moyen non installé (venv .venv-eval-medium absent)"
+            )
+        for key in ("advanced", "approfondi"):
+            button = self._modes.get(key)
+            if button is not None:
+                button.setEnabled(False)
+                button.setToolTip("Module non installé (backend Docling requis)")
 
     def _set_mode(self, mode: str) -> None:
         self._mode = mode
@@ -289,12 +330,43 @@ class MainWindow(QMainWindow):
         if task is None:
             return
         self.preview.show_page(task, page)
+        self._active_page = page
         data = Path(task.work_dir) / f"page_{page:03d}.json"
         if data.is_file():
             try:
-                self.results.show_record(json.loads(data.read_text(encoding="utf-8")))
+                record = json.loads(data.read_text(encoding="utf-8"))
+                self._record_text[page] = str(record.get("text", ""))
+                self.results.show_record(record)
             except (OSError, ValueError):
                 pass
+
+    def _on_text_edited(self, text: str) -> None:
+        """R9 — édition avant copie : sauvegarde débouncée de la page active."""
+        if not self._active_page or self._current_task is None:
+            return
+        if text == self._record_text.get(self._active_page, ""):
+            return
+        self._pending_edit = text
+        self._edit_timer.start()
+
+    def _commit_edit(self) -> None:
+        if self._pending_edit is None or self._current_task is None or not self._active_page:
+            return
+        text = self._pending_edit
+        page = self._active_page
+        if text == self._record_text.get(page, ""):
+            return
+        from dataclasses import replace as dc_replace
+
+        from core.pipeline.job_store import load_page, save_page
+
+        record = load_page(self._current_task.work_dir, page)
+        if record is not None:
+            save_page(dc_replace(record, text=text), self._current_task.work_dir)
+        self._record_text[page] = text
+        self._pending_edit = None
+        title = self.windowTitle().rstrip(" ●")
+        self.setWindowTitle(title + " ●")
 
     def _on_all_done(self) -> None:
         self._update_buttons()
