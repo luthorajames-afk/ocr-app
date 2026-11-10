@@ -51,6 +51,18 @@ QTabBar::tab {{ background: {PANEL}; color: {MUTED}; padding: 8px 12px; border: 
 QTabBar::tab:selected {{ color: {ACCENT}; border-bottom: 2px solid {ACCENT}; }}
 QTextBrowser, QPlainTextEdit {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 7px; }}
 QGraphicsView {{ background: {PANEL_2}; border: 0; }}
+QWidget#TaskCard {{ background: transparent; }}
+QListWidget#TaskList {{ background: {WINDOW}; border: 0; }}
+QListWidget#TaskList::item {{ border-radius: 8px; margin: 2px 6px; }}
+QListWidget#TaskList::item:selected {{
+    background: {PANEL}; border: 1px solid {BORDER};
+}}
+QListWidget#TaskList::item:hover {{ background: {PANEL}; }}
+QSplitter::handle {{ background: {BORDER}; width: 1px; }}
+QStatusBar {{ background: {PANEL}; border-top: 1px solid {BORDER}; }}
+QToolBar {{ background: {PANEL}; border-bottom: 1px solid {BORDER}; }}
+QTabWidget::pane {{ border: 1px solid {BORDER}; background: {PANEL}; }}
+QTextBrowser {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 7px; }}
 """
 
 

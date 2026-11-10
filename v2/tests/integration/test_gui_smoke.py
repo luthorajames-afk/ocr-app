@@ -70,6 +70,18 @@ def test_add_file_starts_task_and_shows_result(window, qtbot) -> None:
     assert window.bottom.export_btn.isEnabled()
 
 
+def test_task_card_shows_progress_bar_under_name(window, qtbot) -> None:
+    entry = BY_ID["fact_001"]
+    assert window.add_file(str(DATA / entry["document"]))
+    task = window._current_task
+    qtbot.waitUntil(lambda: task.status.value == "done", timeout=120_000)
+    widget = window.sidebar._widgets[task.id]
+    assert widget.name.text() == Path(task.source_path).name
+    assert widget.progress.value() == 100
+    assert widget.badge.text() == "Terminé"
+    assert widget.progress.y() > widget.name.y()  # barre sous le nom
+
+
 def test_rendered_columns_are_side_by_side(qtbot) -> None:
     """Les pages multi-colonnes sont rendues en tableau HTML (colonnes côte à côte)."""
     from core.gui.main_window import ResultsPanel

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.gui import theme
 from core.gui.task_runner import Task, TaskRunner, TaskStatus
 from core.metadata import APP_VERSION
 
@@ -44,31 +45,116 @@ MODES = (
 SUPPORTED = {".pdf", ".jpg", ".jpeg", ".png"}
 
 
+STATUS_STYLE = {
+    "running": (theme.ACCENT_SOFT, theme.ACCENT, "En cours"),
+    "paused": (theme.AMBER_SOFT, theme.AMBER, "Pause"),
+    "done": (theme.GREEN_SOFT, theme.GREEN, "Terminé"),
+    "pending": (theme.AMBER_SOFT, theme.AMBER, "En attente"),
+    "cancelled": (theme.PANEL_2, theme.MUTED, "Annulé"),
+    "error": (theme.RED_SOFT, theme.RED, "Erreur"),
+}
+
+
+class TaskItemWidget(QWidget):
+    """Carte de tâche : nom, badge de statut, barre de progression, étape."""
+
+    def __init__(self, task: Task, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("TaskCard")
+        self.name = QLabel(parent=self)
+        self.name.setStyleSheet("font-size: 12.5px; font-weight: 600;")
+        self.badge = QLabel(parent=self)
+        self.badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.progress = QProgressBar(self)
+        self.progress.setRange(0, 100)
+        self.progress.setTextVisible(False)
+        self.progress.setFixedHeight(6)
+        self.stage = QLabel(parent=self)
+        self.percent = QLabel(parent=self)
+        self.percent.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.addWidget(self.name, 1)
+        header.addWidget(self.badge)
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.addWidget(self.stage, 1)
+        footer.addWidget(self.percent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(9, 8, 9, 8)
+        layout.setSpacing(5)
+        layout.addLayout(header)
+        layout.addWidget(self.progress)
+        layout.addLayout(footer)
+        self._apply(task)
+
+    def update_task(self, task: Task) -> None:
+        self._apply(task)
+
+    def _apply(self, task: Task) -> None:
+        self.name.setText(Path(task.source_path).name)
+        background, foreground, label = STATUS_STYLE.get(
+            task.status.value, (theme.PANEL_2, theme.MUTED, task.status.value)
+        )
+        self.badge.setText(label)
+        self.badge.setStyleSheet(
+            f"background: {background}; color: {foreground}; border-radius: 9px;"
+            "padding: 1px 8px; font-size: 10.5px; font-weight: 500;"
+        )
+        total = task.total_pages or 0
+        if total:
+            percent = int(task.pages_done / total * 100)
+        else:
+            percent = 100 if task.status.value == "done" else 0
+        self.progress.setValue(percent)
+        chunk = theme.GREEN if task.status.value == "done" else theme.ACCENT
+        self.progress.setStyleSheet(
+            f"QProgressBar {{ background: {theme.PANEL_2}; border: 0; border-radius: 3px; }}"
+            f"QProgressBar::chunk {{ background: {chunk}; border-radius: 3px; }}"
+        )
+        muted = f"color: {theme.MUTED}; font-size: 10.5px;"
+        self.stage.setStyleSheet(muted)
+        self.percent.setStyleSheet(muted)
+        self.stage.setText(
+            f"page {task.current_page} / {total or '?'} · {task.stage or task.status.value}"
+        )
+        self.percent.setText(
+            f"{task.pages_done}/{total}" if total else ("100 %" if percent == 100 else "—")
+        )
+
+
 class TaskSidebar(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setStyleSheet(f"background: {theme.WINDOW};")
         self.list = QListWidget(self)
         self.list.setObjectName("TaskList")
+        self.list.setSpacing(2)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         header = QLabel("TÂCHES")
         header.setObjectName("Muted")
-        header.setStyleSheet("font-size: 11px; font-weight: 600; letter-spacing: 1px;")
+        header.setStyleSheet(
+            f"padding: 11px 13px 8px; color: {theme.MUTED}; font-size: 11px;"
+            "font-weight: 600; letter-spacing: 1px;"
+        )
         layout.addWidget(header)
         layout.addWidget(self.list)
+        self._widgets: dict[str, TaskItemWidget] = {}
 
     def upsert(self, task: Task) -> None:
-        label = Path(task.source_path).name
-        count = f"{task.pages_done}/{task.total_pages}" if task.total_pages else "—"
-        item_text = f"{label}\n{task.status.value} · page {task.current_page} · {count}"
-        for index in range(self.list.count()):
-            item = self.list.item(index)
-            if item.data(Qt.ItemDataRole.UserRole) == task.id:
-                item.setText(item_text)
-                return
-        item = QListWidgetItem(item_text)
+        widget = self._widgets.get(task.id)
+        if widget is not None:
+            widget.update_task(task)
+            return
+        item = QListWidgetItem(self.list)
         item.setData(Qt.ItemDataRole.UserRole, task.id)
+        widget = TaskItemWidget(task, self.list)
+        item.setSizeHint(widget.sizeHint())
         self.list.addItem(item)
+        self.list.setItemWidget(item, widget)
+        self._widgets[task.id] = widget
 
 
 class PreviewPanel(QWidget):

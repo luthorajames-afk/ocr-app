@@ -82,6 +82,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
   ne supporte pas flexbox).
 - Aperçu : le worker écrit `page_NNN.png` (rendu 300 DPI) à côté du JSON —
   l'aperçu « Original » affiche enfin le document (plus de carré blanc).
+- IHM aux couleurs de la planche validée : cartes de tâche avec nom, badge
+  de statut coloré, barre de progression **sous le nom**, étape et compteur ;
+  feuille de style complétée (panneaux, splitter, barre d'état, onglets).
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 
