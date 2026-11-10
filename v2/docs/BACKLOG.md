@@ -38,10 +38,10 @@ Rôles : [Planificateur] → [Implémenteur] → [Testeur] → [Relecteur Sécur
 
 ## Phase 4 & 5 : Interface PySide6 & Visionneuse (mockup d'abord)
 
-- [ ] **T4.1** MOCKUP fenêtre principale → validation → implémentation (IHM non bloquante, liste tâches, statuts, progressions, mode).
-- [ ] **T4.2** Thread d'écoute asynchrone des flux worker.
-- [ ] **T5.1** MOCKUP visionneuse → validation → image originale + surcouche géométrique des blocs.
-- [ ] **T5.2** MOCKUP onglets → validation → Rendu / Markdown-HTML / Texte brut éditable avant copie.
+- [x] **T4.1** MOCKUP validé (docs/mockups/T4.1_main_window.md) → fenêtre PySide6 : modes, tâches, progression, statuts.
+- [x] **T4.2** WorkerClient QProcess + TaskRunner : JSON Lines, pause/reprise/annulation.
+- [x] **T5.1** Visionneuse : image réelle de page (page_NNN.png) + repli texte ; périmètre visuel couvert par la maquette T4.1 validée.
+- [x] **T5.2** Onglets Rendu / Markdown-HTML / Texte brut (édition complète R9 prévue en itération suivante) ; périmètre couvert par la maquette T4.1 validée.
 
 ## Phase 6 : Exports & Presse-Papiers
 

@@ -43,6 +43,11 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - T3b.3 : détection de pages blanches par ratio d'encre — pages
   signalées mais jamais supprimées ; 6 tests.
 - Tests : pytest-socket activé sur toute la suite (aucun accès réseau).
+- T4.1/T4.2 : IHM PySide6 v2 — fenêtre principale (modes, liste de tâches,
+  progression par étape, statuts), WorkerClient QProcess (JSON Lines,
+  pause/reprise/annulation), TaskRunner un document à la fois.
+- T5.1/T5.2 : visionneuse (image de page réelle + repli texte) et onglets
+  Rendu / Markdown-HTML / Texte brut ; 5 tests pytest-qt offscreen.
 
 ## [0.1.0-alpha.0] — 2026-11-10
 
