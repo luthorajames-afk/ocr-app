@@ -10,6 +10,8 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - `requirements-dev.txt` (pytest, pytest-qt, pytest-socket, ruff, mypy, bandit, pydantic, pip-audit).
 - Jeu de test v2 : 30 documents (factures, formulaires, scans, multi-colonnes) + `truth.txt`.
 - ADR-0001 : structure v2 et réutilisation du corpus v1 comme source de vérité.
+- T1.1 : contrats `OcrEngine` et `ScannerBackend` (typage strict, dataclasses gelées),
+  capacités moteur, résultat OCR structuré ; 6 tests de contrat, ruff + mypy verts.
 
 ## [0.1.0-alpha.0] — 2026-11-10
 

@@ -11,7 +11,7 @@ Rôles : [Planificateur] → [Implémenteur] → [Testeur] → [Relecteur Sécur
 
 ## Phase 1 : Pipeline en Ligne de Commande (Cœur Sans IHM)
 
-- [ ] **T1.1** Interfaces abstraites `OcrEngine` et `ScannerBackend` (typage strict).
+- [x] **T1.1** Interfaces abstraites `OcrEngine` et `ScannerBackend` (typage strict).
 - [ ] **T1.2** Script CLI de base avec Tesseract local (Mode Simple), texte brut sans mise en page.
 - [ ] **T1.3** Extraction de texte natif PDF via `pypdfium2` (contournement OCR).
 
