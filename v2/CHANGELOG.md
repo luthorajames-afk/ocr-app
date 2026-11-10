@@ -53,6 +53,20 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
   HTML systématique ; bouton Copier câblé ; 6 tests.
 - T5.2 complément : édition du texte avant copie (R9) — sauvegarde atomique
   du `page_NNN.json`, marqueur « ● » dans le titre, test dédié.
+- T6.2 : `core/io/exporters.py` — DOCX et Markdown multi-colonnes, numérotation
+  des articles préservée (titres h2/h3, tableaux).
+- T6.3 : export XLSX avec neutralisation stricte des préfixes de formule
+  (=, +, -, @) — `data_type='s'` forcé, testé par relecture openpyxl.
+- T6.4 : export PDF avec image de page + couche de texte invisible
+  (`setTextRenderMode(3)`), texte extrait par pypdfium2 dans les tests.
+- T7.1 : `core/io/modules.py` — manifeste local, SHA-256, compatibilité de
+  version, refus des traversées de chemin ; aucun accès réseau.
+- T7.2 : `scripts/build_workers.py` — PyInstaller --onedir, isolation venv par
+  worker (médium/avancé), garde-fou anti --onefile.
+- T7.3 : installateurs Inno Setup `core/medium/advanced.iss` —
+  PrivilegesRequired=lowest, AppId partagé, UsePreviousAppDir=no.
+- T7.4 : `scripts/security_audit.py` — audit final : pytest, fuzzing exports,
+  bombe pixel, isolation réseau ; résultat AUDIT SÉCURITÉ : PASS.
 - Module Moyen réel : `workers/medium/engine.py` (RapidOCR 3.10, venv 3.12
   dédié via `AOCRI_MEDIUM_VENV` ou `.venv-eval-medium`), bouton Moyen
   activé seulement si l'environnement existe ; test d'intégration réel.
@@ -104,7 +118,7 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
   document (relance l'OCR si changée) et « À propos » ; QSettings persistant.
 - Worker : option `--lang` transmise au moteur (fra/eng/fra+eng).
 
-## Backlog v2 terminé (T0.1 → T6.1)
+## Backlog v2 terminé (T0.1 → T7.4)
 
 ## [0.1.0-alpha.0] — 2026-11-10
 

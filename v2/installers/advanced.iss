@@ -1,0 +1,19 @@
+; T7.3 — Installateur module Avancé (Docling) — par utilisateur, sans admin.
+; AppId partagé ; UsePreviousAppDir=no ; artefacts Docling inclus hors ligne (R4).
+
+[Setup]
+AppId={{A0C21E5F-6001-4C3D-9E4F-8A0C4D5E1F2B}
+AppName=AOCRI
+AppVersion=2.0.0
+DefaultDirName={localappdata}\Programs\AOCRI\modules\advanced
+DefaultGroupName=AOCRI
+PrivilegesRequired=lowest
+UsePreviousAppDir=no
+ArchitecturesAllowed=x64compatible
+
+[Files]
+Source: "..\dist\worker_advanced\worker_advanced\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\models\docling\*"; DestDir: "{app}\models"; Flags: ignoreversion recursesubdirs skipifsourcedoesntexist
+
+[Run]
+Filename: "{app}\module.json"; Description: "Manifeste du module Avancé"; Flags: shellexec skipifsilent
