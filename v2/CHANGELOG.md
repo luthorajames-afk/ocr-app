@@ -77,6 +77,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - Étalonnage qualité OCR : `core/pipeline/calibration.py` (CER/WER,
   confiance moyenne, blocs sous seuil, verdict) + dialogue « Étalonnage… »
   avec export JSON ; tests unitaires et IHM.
+- Colonnes : texte reconstruit dans l'ordre de lecture (pas l'ordre brut
+  de la couche PDF) ; rendu côte à côte via tableau HTML (QTextBrowser
+  ne supporte pas flexbox).
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 

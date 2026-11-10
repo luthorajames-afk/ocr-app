@@ -141,6 +141,11 @@ class Worker:
                             }
                             for block in page.blocks
                         ]
+                        # Texte dans l'ordre de lecture des colonnes (pas l'ordre
+                        # brut de la couche PDF, souvent ligne par ligne).
+                        text = chr(10).join(
+                            block.text for block in page.blocks if block.text.strip()
+                        )
                         if not self._checkpoint(page.number, total, "ocr"):
                             break
                     else:

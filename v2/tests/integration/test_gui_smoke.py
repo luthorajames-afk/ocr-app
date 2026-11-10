@@ -70,6 +70,26 @@ def test_add_file_starts_task_and_shows_result(window, qtbot) -> None:
     assert window.bottom.export_btn.isEnabled()
 
 
+def test_rendered_columns_are_side_by_side(qtbot) -> None:
+    """Les pages multi-colonnes sont rendues en tableau HTML (colonnes côte à côte)."""
+    from core.gui.main_window import ResultsPanel
+
+    blocks = []
+    for index in range(6):
+        blocks.append(
+            {"text": f"gauche {index}", "bbox": [45, 40 + index * 18, 250, 55], "kind": "line"}
+        )
+    for index in range(6):
+        blocks.append(
+            {"text": f"droite {index}", "bbox": [305, 40 + index * 18, 520, 55], "kind": "line"}
+        )
+    panel = ResultsPanel()
+    qtbot.addWidget(panel)
+    panel.show_record({"page": 1, "text": "gauche droite", "blocks": blocks})
+    html = panel.rendered.toHtml()
+    assert "vertical-align:top" in html or "vertical-align: top" in html
+
+
 def test_worker_client_protocol_messages(qtbot, tmp_path) -> None:
     entry = BY_ID["fact_001"]
     client = WorkerClient()

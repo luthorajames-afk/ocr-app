@@ -183,51 +183,104 @@ class ResultsPanel(QTabWidget):
         html_parts: list[str] = []
         blocks = record.get("blocks")
         if isinstance(blocks, list) and blocks:
-            current_column = None
-            for block in blocks:
-                if not isinstance(block, dict):
-                    continue
-                content = escape(str(block.get("text", "")))
-                if not content.strip():
-                    continue
-                kind = str(block.get("kind", "line"))
-                bbox = block.get("bbox") or [0, 0, 0, 0]
-                try:
-                    column = round(float(bbox[0]) / 40)
-                except (TypeError, ValueError, IndexError):
-                    column = 0
-                if column != current_column and current_column is not None:
-                    html_parts.append("</div>")
-                if current_column is None or column != current_column:
-                    html_parts.append("<div style='margin-bottom:10px'>")
-                    current_column = column
-                if kind == "table":
-                    grid = block.get("grid") or []
-                    rows_html = []
-                    for row_index, row in enumerate(grid):
-                        tag = "th" if row_index == 0 else "td"
-                        cells = "".join(
-                            f"<{tag} style='border:1px solid #c3c8d2;padding:3px 6px'>"
-                            f"{escape(str(cell))}</{tag}>"
-                            for cell in row
-                        )
-                        rows_html.append(f"<tr>{cells}</tr>")
-                    html_parts.append(
-                        "<table style='border-collapse:collapse;margin:6px 0'>"
-                        + "".join(rows_html)
-                        + "</table>"
-                    )
-                elif kind == "title":
-                    html_parts.append(f"<h2 style='margin:6px 0'>{content}</h2>")
-                else:
-                    html_parts.append(f"<p style='margin:2px 0'>{content}</p>")
-            if current_column is not None:
-                html_parts.append("</div>")
+            html_parts = self._render_blocks(blocks)
         else:
             html_parts = [
                 f"<p>{escape(line)}</p>" for line in text.splitlines() if line.strip()
             ]
         self.rendered.setHtml("".join(html_parts) or "<p>[page vide]</p>")
+        self._loading = False
+
+    @staticmethod
+    def _block_html(block: dict[str, object]) -> str:
+        content = escape(str(block.get("text", "")))
+        kind = str(block.get("kind", "line"))
+        if kind == "table":
+            grid = block.get("grid") or []
+            rows_html = []
+            for row_index, row in enumerate(grid if isinstance(grid, list) else []):
+                tag = "th" if row_index == 0 else "td"
+                cells = "".join(
+                    f"<{tag} style='border:1px solid #c3c8d2;padding:3px 6px'>"
+                    f"{escape(str(cell))}</{tag}>"
+                    for cell in row
+                )
+                rows_html.append(f"<tr>{cells}</tr>")
+            return (
+                "<table style='border-collapse:collapse;margin:6px 0'>"
+                + "".join(rows_html)
+                + "</table>"
+            )
+        if kind == "title":
+            return f"<h2 style='margin:6px 0'>{content}</h2>"
+        return f"<p style='margin:2px 0'>{content}</p>"
+
+    def _render_blocks(self, blocks: list[object]) -> list[str]:
+        """Rendu : colonnes côte à côte quand la page en contient plusieurs."""
+        groups: list[list[dict[str, object]]] = []
+        buckets: list[int] = []
+        rights_by_group: list[list[float]] = []
+        group_lefts: list[float] = []
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            bbox = block.get("bbox") or [0, 0, 0, 0]
+            try:
+                x0 = float(bbox[0])
+                x1 = float(bbox[2])
+            except (TypeError, ValueError, IndexError):
+                x0, x1 = 0.0, 0.0
+            bucket = round(x0 / 40)
+            if groups and buckets[-1] == bucket:
+                groups[-1].append(block)
+                rights_by_group[-1].append(x1)
+            else:
+                groups.append([block])
+                buckets.append(bucket)
+                rights_by_group.append([x1])
+                group_lefts.append(x0)
+
+        lefts = [
+            float((block.get("bbox") or [0])[0])
+            for block in blocks
+            if isinstance(block, dict)
+        ]
+        rights = [
+            float((block.get("bbox") or [0, 0, 0])[2])
+            for block in blocks
+            if isinstance(block, dict)
+        ]
+        page_left = min(lefts, default=0.0)
+        page_right = max(rights, default=0.0)
+        page_width = max(page_right - page_left, 1.0)
+        def median(values: list[float]) -> float:
+            ordered = sorted(values)
+            return ordered[len(ordered) // 2] if ordered else 0.0
+
+        narrow = all(
+            (median(rights) - left) < page_width * 0.8
+            for rights, left in zip(rights_by_group, group_lefts)
+        )
+        use_columns = 2 <= len(groups) <= 4 and narrow
+
+        parts: list[str] = []
+        if use_columns:
+            # QTextBrowser ne gère pas flexbox : colonnes en tableau HTML.
+            parts.append(
+                "<table width='100%' cellspacing='0' cellpadding='8' "
+                "style='border-collapse:collapse'><tr>"
+            )
+            for group in groups:
+                parts.append("<td valign='top' style='vertical-align:top'>")
+                for block in group:
+                    parts.append(self._block_html(block))
+                parts.append("</td>")
+            parts.append("</tr></table>")
+        else:
+            for group in groups:
+                for block in group:
+                    parts.append(self._block_html(block))
+        return parts
         self._loading = False
 
     def _on_plain_changed(self) -> None:
