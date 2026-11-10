@@ -16,6 +16,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
   (process/info, texte brut par page).
 - T1.3 : `load_document` via pypdfium2 — rendu 300 DPI max, texte natif
   prioritaire avec seuil de significativité ; 14 tests (unit + intégration).
+- T2.1 : `tests/bench/bench_runner.py` — CER, WER, agrégats par thème, rapport JSON.
+- T2.2 : `core/pipeline/image_quality.py` — variance du Laplacien, contraste RMS,
+  inclinaison par profils de projection (sans cv2) ; 10 tests.
 
 ## [0.1.0-alpha.0] — 2026-11-10
 

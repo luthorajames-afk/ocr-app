@@ -17,8 +17,8 @@ Rôles : [Planificateur] → [Implémenteur] → [Testeur] → [Relecteur Sécur
 
 ## Phase 2 : Évaluation, Algorithme Adaptatif & Banc de Test
 
-- [ ] **T2.1** Module de benchmarking autonome `tests/bench/bench_runner.py` (CER + WER).
-- [ ] **T2.2** Triage qualité d'image : variance du Laplacien, angle d'inclinaison OpenCV, contraste.
+- [x] **T2.1** Module de benchmarking autonome `tests/bench/bench_runner.py` (CER + WER).
+- [x] **T2.2** Triage qualité d'image : variance du Laplacien, angle d'inclinaison OpenCV, contraste.
 - [ ] **T2.3** Prétraitement adaptatif : redressement, binarisation Sauvola locale, suréchantillonnage DPI.
 - [ ] **T2.4** Seconde passe sur lignes sous seuil de confiance + vote bi-moteur (Moyen/Avancé).
 - [ ] **T2.5** Post-correction lexique juridique/gestion avec exclusion des numéros d'articles et références.
