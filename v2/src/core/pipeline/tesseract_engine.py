@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -21,10 +22,15 @@ DEFAULT_LANGUAGES = ("fra", "eng")
 
 
 def resolve_tessdata() -> Path:
-    """Chemin tessdata explicite (R4) : env, puis models/tessdata du dépôt."""
+    """Chemin tessdata explicite (R4) : env, bundle PyInstaller, puis dépôt."""
     env_path = os.environ.get("TESSDATA_PREFIX")
     if env_path and Path(env_path).is_dir():
         return Path(env_path)
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        bundled = Path(bundle) / "models" / "tessdata"
+        if bundled.is_dir():
+            return bundled
     repo_models = Path(__file__).resolve().parents[3] / "models" / "tessdata"
     if repo_models.is_dir():
         return repo_models

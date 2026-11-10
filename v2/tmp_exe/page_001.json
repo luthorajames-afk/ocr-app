@@ -1,0 +1,432 @@
+{
+  "schema_version": 1,
+  "page": 1,
+  "source": "tests\\data\\documents\\fact_001.pdf",
+  "engine": "tesseract",
+  "engine_version": "tesseract 5.5.3",
+  "duration_ms": 0.0,
+  "text": "SARL Dupont & Fils\nMatériel informatique et bureautique\n42 rue des Lilas ꞏ 75012 Paris\nTél. 01 43 27 65 18 — contact@dupont­fils.fr\nSIRET 812 345 678 00027 — TVA FR 32 812345678\nFACTURÉ À\nMme Élodie Marchand\n14 rue des Écoles\n75011 Paris\nelodie.marchand@example.fr\nTVA FR 12 445566778\nDésignation | Unité | Qté | P.U. HT | TVA | Montant HT\nAbonnement revue mensuelle | mois | 2 | 8,90 € | 5,5 % | 17,80 €\nStylo bille bleu | unité | 2 | 1,20 € | 20 % | 2,40 €\nLampe de bureau LED | unité | 3 | 39,90 € | 20 % | 119,70 €\nPochette de 100 chemises | lot | 2 | 18,60 € | 20 % | 37,20 €\nInstallation et configuration | forfait | 10 | 120,00 € | 20 % | 1 200,00 €\nMODALITÉS DE RÈGLEMENT\nRèglement à 30 jours date de facture. Virement bancaire sur le compte IBAN FR76 3000\n4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de\nfacture en référence.\nSARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois\nfois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.\nSous­total HT :\nTVA 5,5 % (base 17,80 €) :\nTVA 20 % (base 1 359,30 €) :\nTotal TTC :\nFACTURE\nÉchéance : 11 février 2026\nN° FA­2026­0101\nDate : 12 janvier 2026\n1 377,10 €\n1 649,94 €\n0,98 €\n271,86 €\nPage 1 / 1",
+  "blocks": [
+    {
+      "text": "SARL Dupont & Fils",
+      "bbox": [
+        44.736000061035156,
+        25.61602783203125,
+        195.20004272460938,
+        40.57598876953125
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Matériel informatique et bureautique",
+      "bbox": [
+        44.73720169067383,
+        43.67578125,
+        168.63238525390625,
+        50.984375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "42 rue des Lilas ꞏ 75012 Paris",
+      "bbox": [
+        44.26139831542969,
+        54.30596923828125,
+        147.41639709472656,
+        60.0858154296875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Tél. 01 43 27 65 18 — contact@dupont­fils.fr",
+      "bbox": [
+        44.33940124511719,
+        64.78802490234375,
+        199.4813995361328,
+        72.190185546875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "SIRET 812 345 678 00027 — TVA FR 32 812345678",
+      "bbox": [
+        44.51100158691406,
+        75.35577392578125,
+        227.95928955078125,
+        81.213623046875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURÉ À",
+      "bbox": [
+        52.402400970458984,
+        114.4708251953125,
+        95.68440246582031,
+        121.52362060546875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Mme Élodie Marchand",
+      "bbox": [
+        52.58549880981445,
+        122.85150146484375,
+        161.9324951171875,
+        132.595458984375
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "14 rue des Écoles",
+      "bbox": [
+        52.75559997558594,
+        134.916015625,
+        118.71240234375,
+        142.65240478515625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "75011 Paris",
+      "bbox": [
+        52.234798431396484,
+        147.94793701171875,
+        96.3179931640625,
+        154.17236328125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "elodie.marchand@example.fr",
+      "bbox": [
+        52.15079879760742,
+        159.38397216796875,
+        161.76239013671875,
+        167.3555908203125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA FR 12 445566778",
+      "bbox": [
+        52.033199310302734,
+        170.98797607421875,
+        137.32679748535156,
+        177.21240234375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Désignation | Unité | Qté | P.U. HT | TVA | Montant HT\nAbonnement revue mensuelle | mois | 2 | 8,90 € | 5,5 % | 17,80 €\nStylo bille bleu | unité | 2 | 1,20 € | 20 % | 2,40 €\nLampe de bureau LED | unité | 3 | 39,90 € | 20 % | 119,70 €\nPochette de 100 chemises | lot | 2 | 18,60 € | 20 % | 37,20 €\nInstallation et configuration | forfait | 10 | 120,00 € | 20 % | 1 200,00 €",
+      "bbox": [
+        47.040000915527344,
+        196.34478759765625,
+        548.8112182617188,
+        274.76715087890625
+      ],
+      "confidence": 1.0,
+      "kind": "table",
+      "grid": [
+        [
+          "Désignation",
+          "Unité",
+          "Qté",
+          "P.U. HT",
+          "TVA",
+          "Montant HT"
+        ],
+        [
+          "Abonnement revue mensuelle",
+          "mois",
+          "2",
+          "8,90 €",
+          "5,5 %",
+          "17,80 €"
+        ],
+        [
+          "Stylo bille bleu",
+          "unité",
+          "2",
+          "1,20 €",
+          "20 %",
+          "2,40 €"
+        ],
+        [
+          "Lampe de bureau LED",
+          "unité",
+          "3",
+          "39,90 €",
+          "20 %",
+          "119,70 €"
+        ],
+        [
+          "Pochette de 100 chemises",
+          "lot",
+          "2",
+          "18,60 €",
+          "20 %",
+          "37,20 €"
+        ],
+        [
+          "Installation et configuration",
+          "forfait",
+          "10",
+          "120,00 €",
+          "20 %",
+          "1 200,00 €"
+        ]
+      ]
+    },
+    {
+      "text": "MODALITÉS DE RÈGLEMENT",
+      "bbox": [
+        44.7421989440918,
+        357.76055908203125,
+        159.5913848876953,
+        365.37835693359375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Règlement à 30 jours date de facture. Virement bancaire sur le compte IBAN FR76 3000",
+      "bbox": [
+        44.77619934082031,
+        368.63580322265625,
+        349.6548156738281,
+        376.0301818847656
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de",
+      "bbox": [
+        44.26139831542969,
+        379.19580078125,
+        332.3856201171875,
+        386.50439453125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "facture en référence.",
+      "bbox": [
+        44.230201721191406,
+        389.75579833984375,
+        115.41299438476562,
+        395.60577392578125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "SARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois",
+      "bbox": [
+        44.447998046875,
+        792.070384979248,
+        507.0849609375,
+        798.0671844482422
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "fois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.",
+      "bbox": [
+        44.21759796142578,
+        800.7103843688965,
+        392.82568359375,
+        806.7775840759277
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Sous­total HT :",
+      "bbox": [
+        331.6050109863281,
+        292.86895751953125,
+        390.375,
+        299.61895751953125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA 5,5 % (base 17,80 €) :",
+      "bbox": [
+        331.4070129394531,
+        304.38897705078125,
+        438.86700439453125,
+        312.92095947265625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "TVA 20 % (base 1 359,30 €) :",
+      "bbox": [
+        331.4070129394531,
+        315.90899658203125,
+        448.875,
+        324.44097900390625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Total TTC :",
+      "bbox": [
+        331.39739990234375,
+        327.6134033203125,
+        379.2998046875,
+        334.66339111328125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "FACTURE",
+      "bbox": [
+        410.7225036621094,
+        28.22998046875,
+        550.2525024414062,
+        50.72998046875
+      ],
+      "confidence": 1.0,
+      "kind": "title",
+      "grid": []
+    },
+    {
+      "text": "Échéance : 11 février 2026",
+      "bbox": [
+        448.5426940917969,
+        80.7919921875,
+        552.5498657226562,
+        88.89678955078125
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "N° FA­2026­0101",
+      "bbox": [
+        484.51629638671875,
+        56.3768310546875,
+        550.771484375,
+        62.976806640625
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Date : 12 janvier 2026",
+      "bbox": [
+        467.23760986328125,
+        69.41595458984375,
+        552.1928100585938,
+        77.67913818359375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "1 377,10 €",
+      "bbox": [
+        502.1009826660156,
+        292.86895751953125,
+        543.4920043945312,
+        300.7889404296875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "1 649,94 €",
+      "bbox": [
+        500.422607421875,
+        327.6134033203125,
+        543.7847900390625,
+        336.0545959472656
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "0,98 €",
+      "bbox": [
+        519.7379760742188,
+        304.38897705078125,
+        544.2269897460938,
+        312.3089599609375
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "271,86 €",
+      "bbox": [
+        509.06097412109375,
+        315.90899658203125,
+        543.6749877929688,
+        323.8289794921875
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    },
+    {
+      "text": "Page 1 / 1",
+      "bbox": [
+        520.3636474609375,
+        792.2547836303711,
+        549.5628051757812,
+        798.7011833190918
+      ],
+      "confidence": 1.0,
+      "kind": "line",
+      "grid": []
+    }
+  ]
+}

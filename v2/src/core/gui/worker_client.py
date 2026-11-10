@@ -22,6 +22,15 @@ from core.pipeline.protocol import (
 )
 
 
+def frozen_worker(mode: str) -> str | None:
+    """Worker packagé à côté de l'exécutable (build PyInstaller --onedir)."""
+    if not getattr(sys, "frozen", False):
+        return None
+    base = Path(sys.executable).resolve().parent
+    candidate = base / "workers" / f"worker_{mode}" / f"worker_{mode}.exe"
+    return str(candidate) if candidate.is_file() else None
+
+
 def medium_python() -> str:
     """Interpréteur du module Moyen : venv dédié (R13), sinon noyau."""
     override = os.environ.get("AOCRI_MEDIUM_VENV")
@@ -103,27 +112,43 @@ class WorkerClient(QObject):
             self._process.terminate()
             self._process.waitForFinished(2000)
         self._buffer = ""
-        if mode == "medium":
-            program = medium_python()
-        elif mode in ("advanced", "approfondi"):
-            program = advanced_python()
+        packaged = frozen_worker(mode)
+        if packaged is not None:
+            program = packaged
+            arguments = [
+                "--input",
+                str(input_path),
+                "--work-dir",
+                str(work_dir),
+                "--dpi",
+                str(dpi),
+                "--mode",
+                mode,
+                "--lang",
+                languages,
+            ]
         else:
-            program = sys.executable
-        arguments = [
-            "-u",
-            "-m",
-            "workers.worker_main",
-            "--input",
-            str(input_path),
-            "--work-dir",
-            str(work_dir),
-            "--dpi",
-            str(dpi),
-            "--mode",
-            mode,
-            "--lang",
-            languages,
-        ]
+            if mode == "medium":
+                program = medium_python()
+            elif mode in ("advanced", "approfondi"):
+                program = advanced_python()
+            else:
+                program = sys.executable
+            arguments = [
+                "-u",
+                "-m",
+                "workers.worker_main",
+                "--input",
+                str(input_path),
+                "--work-dir",
+                str(work_dir),
+                "--dpi",
+                str(dpi),
+                "--mode",
+                mode,
+                "--lang",
+                languages,
+            ]
         if page is not None:
             arguments += ["--page", str(page)]
         if second_pass:

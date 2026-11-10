@@ -60,7 +60,7 @@ def build_command(target: str, venv: Path | None = None) -> list[str]:
     python = interpreter_for(target, venv)
     dist = PROJECT / "dist" / f"worker_{target}"
     work = PROJECT / "build" / f"worker_{target}"
-    return [
+    command = [
         str(python),
         "-m",
         "PyInstaller",
@@ -76,8 +76,14 @@ def build_command(target: str, venv: Path | None = None) -> list[str]:
         str(work),
         "--paths",
         str(PROJECT / "src"),
-        str(PROJECT / "src" / "workers" / "worker_main.py"),
     ]
+    if target == "simple":
+        tessdata = PROJECT / "models" / "tessdata"
+        if tessdata.is_dir():
+            command += ["--add-data", f"{tessdata};models/tessdata"]
+        command += ["--hidden-import", "tesserocr"]
+    command.append(str(PROJECT / "src" / "workers" / "worker_main.py"))
+    return command
 
 
 def enforce_onedir(command: list[str]) -> None:
