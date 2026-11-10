@@ -1,0 +1,20 @@
+# Environnements
+.venv/
+venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Distribution
+build/
+dist/
+
+# Rapports de test
+coverage.xml
+htmlcov/

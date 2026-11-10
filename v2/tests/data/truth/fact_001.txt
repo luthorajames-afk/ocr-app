@@ -1,0 +1,29 @@
+SARL Dupont & Fils
+Matériel informatique et bureautique
+42 rue des Lilas · 75012 Paris
+Tél. 01 43 27 65 18 — contact@dupont-fils.fr
+SIRET 812 345 678 00027 — TVA FR 32 812345678
+FACTURE
+N° FA-2026-0101
+Date : 12 janvier 2026
+Échéance : 11 février 2026
+FACTURÉ À
+Mme Élodie Marchand
+14 rue des Écoles
+75011 Paris
+elodie.marchand@example.fr
+TVA FR 12 445566778
+Désignation | Unité | Qté | P.U. HT | TVA | Montant HT
+Abonnement revue mensuelle | mois | 2 | 8,90 € | 5,5 % | 17,80 €
+Stylo bille bleu | unité | 2 | 1,20 € | 20 % | 2,40 €
+Lampe de bureau LED | unité | 3 | 39,90 € | 20 % | 119,70 €
+Pochette de 100 chemises | lot | 2 | 18,60 € | 20 % | 37,20 €
+Installation et configuration | forfait | 10 | 120,00 € | 20 % | 1 200,00 €
+Sous-total HT : 1 377,10 €
+TVA 5,5 % (base 17,80 €) : 0,98 €
+TVA 20 % (base 1 359,30 €) : 271,86 €
+Total TTC : 1 649,94 €
+MODALITÉS DE RÈGLEMENT
+Règlement à 30 jours date de facture. Virement bancaire sur le compte IBAN FR76 3000 4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de facture en référence.
+SARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois fois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.
+Page 1 / 1

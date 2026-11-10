@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aocri"
+version = "0.1.0a0"
+description = "AOCRI v2 — OCR hors ligne, Kriesty Solutions"
+requires-python = ">=3.10"
+dependencies = [
+    "pypdfium2",
+    "pillow",
+    "numpy",
+    "pydantic>=2.8",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6"]
+simple = ["tesserocr"]
+medium = ["rapidocr", "opencv-python-headless"]
+advanced = ["docling"]
+dev = [
+    "pytest>=8.0",
+    "pytest-qt>=4.4",
+    "pytest-socket>=0.7",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "bandit>=1.7",
+    "pip-audit>=2.8",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]

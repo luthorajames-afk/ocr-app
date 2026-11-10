@@ -1,0 +1,36 @@
+SARL Dupont & Fils
+Matériel informatique et bureautique
+42 rue des Lilas · 75012 Paris
+Tél. 01 43 27 65 18 — contact@dupont-fils.fr
+SIRET 812 345 678 00027 — TVA FR 32 812345678
+FACTURE
+N° FA-2026-0105
+Date : 18 septembre 2026
+Échéance : 18 octobre 2026
+FACTURÉ À
+M. Jérôme Noël
+5 rue de l'Église
+44000 Nantes
+jerome.noel@example.fr
+TVA FR 56 889900112
+Désignation | Unité | Qté | P.U. HT | TVA | Montant HT
+Bureau assis-debout | unité | 3 | 549,00 € | 20 % | 1 647,00 €
+Clavier mécanique AZERTY | unité | 1 | 79,90 € | 20 % | 79,90 €
+Souris ergonomique sans fil | unité | 12 | 34,50 € | 20 % | 414,00 €
+Disque SSD externe 1 To | unité | 6 | 119,00 € | 20 % | 714,00 €
+Formation bureautique | session | 12 | 450,00 € | 20 % | 5 400,00 €
+Câble HDMI 2 m | unité | 4 | 12,90 € | 20 % | 51,60 €
+Station d'accueil USB-C | unité | 2 | 149,00 € | 20 % | 298,00 €
+Casque audio antibruit | unité | 1 | 129,00 € | 20 % | 129,00 €
+Écran 27 pouces LED | unité | 2 | 189,00 € | 20 % | 378,00 €
+Nettoyant écran | flacon | 2 | 8,50 € | 20 % | 17,00 €
+Multiprise parafoudre | unité | 8 | 24,90 € | 20 % | 199,20 €
+Ramette papier A4 80 g | ramette | 10 | 5,40 € | 5,5 % | 54,00 €
+Sous-total HT : 9 381,70 €
+TVA 5,5 % (base 54,00 €) : 2,97 €
+TVA 20 % (base 9 327,70 €) : 1 865,54 €
+Total TTC : 11 250,21 €
+MODALITÉS DE RÈGLEMENT
+Paiement à réception de la facture. Virement bancaire sur le compte IBAN FR76 3000 4008 2800 0123 4567 890 — BIC BNPAFRPPXXX. Merci de rappeler le numéro de facture en référence.
+SARL Dupont & Fils — Matériel informatique et bureautique — SIRET 812 345 678 00027 — TVA intracommunautaire FR 32 812345678. Pénalités de retard : trois fois le taux d'intérêt légal ; indemnité forfaitaire pour frais de recouvrement : 40 €. Escompte pour paiement anticipé : néant.
+Page 1 / 1

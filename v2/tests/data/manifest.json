@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "source": "D:\\projects\\AOCRI\\ocr_app\\data\\test_suite\\manifest.json",
+  "documents": [
+    {
+      "id": "fact_001",
+      "document": "documents/fact_001.pdf",
+      "truth": "truth/fact_001.txt",
+      "difficulty": "easy",
+      "theme": "facture",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "fact_002",
+      "document": "documents/fact_002.pdf",
+      "truth": "truth/fact_002.txt",
+      "difficulty": "easy",
+      "theme": "facture",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "fact_003",
+      "document": "documents/fact_003.pdf",
+      "truth": "truth/fact_003.txt",
+      "difficulty": "easy",
+      "theme": "facture",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "fact_009",
+      "document": "documents/fact_009.pdf",
+      "truth": "truth/fact_009.txt",
+      "difficulty": "hard",
+      "theme": "facture",
+      "pages": 2,
+      "has_accents": true
+    },
+    {
+      "id": "fact_010",
+      "document": "documents/fact_010.pdf",
+      "truth": "truth/fact_010.txt",
+      "difficulty": "hard",
+      "theme": "facture",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "fact_011",
+      "document": "documents/fact_011.pdf",
+      "truth": "truth/fact_011.txt",
+      "difficulty": "hard",
+      "theme": "facture",
+      "pages": 2,
+      "has_accents": true
+    },
+    {
+      "id": "fact_012",
+      "document": "documents/fact_012.pdf",
+      "truth": "truth/fact_012.txt",
+      "difficulty": "hard",
+      "theme": "facture",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "fact_004",
+      "document": "documents/fact_004.pdf",
+      "truth": "truth/fact_004.txt",
+      "difficulty": "medium",
+      "theme": "facture",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "fact_005",
+      "document": "documents/fact_005.pdf",
+      "truth": "truth/fact_005.txt",
+      "difficulty": "medium",
+      "theme": "facture",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "fact_006",
+      "document": "documents/fact_006.pdf",
+      "truth": "truth/fact_006.txt",
+      "difficulty": "medium",
+      "theme": "facture",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "form_001",
+      "document": "documents/form_001.pdf",
+      "truth": "truth/form_001.txt",
+      "difficulty": "easy",
+      "theme": "formulaire",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "form_002",
+      "document": "documents/form_002.pdf",
+      "truth": "truth/form_002.txt",
+      "difficulty": "easy",
+      "theme": "formulaire",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "form_003",
+      "document": "documents/form_003.pdf",
+      "truth": "truth/form_003.txt",
+      "difficulty": "easy",
+      "theme": "formulaire",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "form_007",
+      "document": "documents/form_007.pdf",
+      "truth": "truth/form_007.txt",
+      "difficulty": "hard",
+      "theme": "formulaire",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "form_008",
+      "document": "documents/form_008.pdf",
+      "truth": "truth/form_008.txt",
+      "difficulty": "hard",
+      "theme": "formulaire",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "form_009",
+      "document": "documents/form_009.pdf",
+      "truth": "truth/form_009.txt",
+      "difficulty": "hard",
+      "theme": "formulaire",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "form_004",
+      "document": "documents/form_004.pdf",
+      "truth": "truth/form_004.txt",
+      "difficulty": "medium",
+      "theme": "formulaire",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "scan_001",
+      "document": "documents/scan_001.pdf",
+      "truth": "truth/scan_001.txt",
+      "difficulty": "easy",
+      "theme": "scan",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "scan_002",
+      "document": "documents/scan_002.jpg",
+      "truth": "truth/scan_002.txt",
+      "difficulty": "easy",
+      "theme": "scan",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "scan_006",
+      "document": "documents/scan_006.pdf",
+      "truth": "truth/scan_006.txt",
+      "difficulty": "hard",
+      "theme": "scan",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "scan_007",
+      "document": "documents/scan_007.pdf",
+      "truth": "truth/scan_007.txt",
+      "difficulty": "hard",
+      "theme": "scan",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "scan_008",
+      "document": "documents/scan_008.pdf",
+      "truth": "truth/scan_008.txt",
+      "difficulty": "hard",
+      "theme": "scan",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "scan_009",
+      "document": "documents/scan_009.png",
+      "truth": "truth/scan_009.txt",
+      "difficulty": "hard",
+      "theme": "scan",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "scan_003",
+      "document": "documents/scan_003.pdf",
+      "truth": "truth/scan_003.txt",
+      "difficulty": "medium",
+      "theme": "scan",
+      "pages": 1,
+      "has_accents": true
+    },
+    {
+      "id": "mixed_001",
+      "document": "documents/mixed_001.pdf",
+      "truth": "truth/mixed_001.txt",
+      "difficulty": "easy",
+      "theme": "document_multicolonne",
+      "pages": 2,
+      "has_accents": true
+    },
+    {
+      "id": "mixed_002",
+      "document": "documents/mixed_002.pdf",
+      "truth": "truth/mixed_002.txt",
+      "difficulty": "easy",
+      "theme": "document_multicolonne",
+      "pages": 2,
+      "has_accents": true
+    },
+    {
+      "id": "mixed_005",
+      "document": "documents/mixed_005.pdf",
+      "truth": "truth/mixed_005.txt",
+      "difficulty": "hard",
+      "theme": "document_multicolonne",
+      "pages": 5,
+      "has_accents": true
+    },
+    {
+      "id": "mixed_007",
+      "document": "documents/mixed_007.pdf",
+      "truth": "truth/mixed_007.txt",
+      "difficulty": "easy",
+      "theme": "mixte",
+      "pages": 2,
+      "has_accents": true
+    },
+    {
+      "id": "mixed_008",
+      "document": "documents/mixed_008.pdf",
+      "truth": "truth/mixed_008.txt",
+      "difficulty": "easy",
+      "theme": "mixte",
+      "pages": 2,
+      "has_accents": true
+    },
+    {
+      "id": "mixed_011",
+      "document": "documents/mixed_011.pdf",
+      "truth": "truth/mixed_011.txt",
+      "difficulty": "hard",
+      "theme": "mixte",
+      "pages": 3,
+      "has_accents": true
+    }
+  ]
+}
