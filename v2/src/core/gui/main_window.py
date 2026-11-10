@@ -178,7 +178,7 @@ class PreviewPanel(QWidget):
         self.zoom_out_btn = QPushButton("−", self)
         self.zoom_in_btn = QPushButton("+", self)
         self.fit_btn = QPushButton("Ajuster", self)
-        self.collapse_btn = QPushButton("Replier", self)
+        self.compare_btn = QPushButton("Comparer", self)
         self.detach_btn = QPushButton("Détacher", self)
         for button in (self.prev_btn, self.next_btn, self.zoom_out_btn, self.zoom_in_btn):
             button.setFixedWidth(30)
@@ -196,7 +196,7 @@ class PreviewPanel(QWidget):
         head.addWidget(self.zoom_in_btn)
         head.addWidget(self.fit_btn)
         head.addSpacing(10)
-        head.addWidget(self.collapse_btn)
+        head.addWidget(self.compare_btn)
         head.addWidget(self.detach_btn)
         self.compare = QTextBrowser(self)
         self.compare.setOpenExternalLinks(False)
@@ -207,9 +207,9 @@ class PreviewPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.addLayout(head)
         layout.addWidget(self.body, 1)
-        self._collapsed = False
-        self._expanded_sizes = [600, 400]
-        self.collapse_btn.clicked.connect(self.toggle_result_pane)
+        self.compare_btn.setCheckable(True)
+        self.compare_btn.setChecked(True)
+        self.compare_btn.toggled.connect(self.compare.setVisible)
         self._page = 1
         self._total = 1
         self._html = "<p style='color:#68707d'>Résultat en attente…</p>"
@@ -286,7 +286,7 @@ class PreviewPanel(QWidget):
             self._detached = window
             # Le preview original occupe tout l'espace laissé vacant.
             self.compare.setVisible(False)
-            self.collapse_btn.setEnabled(False)
+            self.compare_btn.setEnabled(False)
             self.detach_btn.setText("Épingler")
         else:
             self._pinning = True
@@ -303,25 +303,9 @@ class PreviewPanel(QWidget):
         self._restore_inline_compare()
 
     def _restore_inline_compare(self) -> None:
-        self.collapse_btn.setEnabled(True)
-        self.compare.setVisible(not self._collapsed)
+        self.compare_btn.setEnabled(True)
+        self.compare.setVisible(self.compare_btn.isChecked())
         self.detach_btn.setText("Détacher")
-
-    def toggle_result_pane(self) -> None:
-        """Replie/déplie le panneau de résultat pour agrandir l'original."""
-        if self._detached is not None:
-            return
-        if not self._collapsed:
-            self._expanded_sizes = self.body.sizes()
-            self.compare.setVisible(False)
-            self._collapsed = True
-            self.collapse_btn.setText("Déplier")
-        else:
-            self.compare.setVisible(True)
-            self._collapsed = False
-            self.collapse_btn.setText("Replier")
-            self.body.setSizes(self._expanded_sizes)
-            self.fit_page()
 
 class ResultsPanel(QTabWidget):
     text_edited = Signal(str)
@@ -509,8 +493,14 @@ class MainWindow(QMainWindow):
         center = QWidget(self)
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
-        center_layout.addWidget(self.preview, 3)
-        center_layout.addWidget(self.results, 2)
+        self.center_split = QSplitter(Qt.Orientation.Vertical, center)
+        self.center_split.addWidget(self.preview)
+        self.center_split.addWidget(self.results)
+        self.center_split.setSizes([520, 260])
+        self.center_split.setStretchFactor(0, 3)
+        self.center_split.setStretchFactor(1, 2)
+        self._results_sizes = [520, 260]
+        center_layout.addWidget(self.center_split)
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
         splitter.addWidget(self.sidebar)
         splitter.addWidget(center)
@@ -558,6 +548,9 @@ class MainWindow(QMainWindow):
             self._modes[key] = button
         self._update_mode_availability()
         add = QPushButton("Fichiers", bar)
+        self.results_btn = QPushButton("Résultat ▾", bar)
+        self.results_btn.setToolTip("Replier / déplier le bloc Rendu / HTML / Texte brut")
+        self.results_btn.clicked.connect(self._toggle_results)
         settings = QPushButton("Réglages…", bar)
         settings.clicked.connect(self._open_settings)
         calibrate = QPushButton("Étalonnage…", bar)
@@ -570,6 +563,7 @@ class MainWindow(QMainWindow):
         info.setObjectName("Muted")
         layout.addWidget(group)
         layout.addWidget(add)
+        layout.addWidget(self.results_btn)
         layout.addWidget(settings)
         self.calibrate_btn = calibrate
         layout.addWidget(calibrate)
@@ -760,6 +754,19 @@ class MainWindow(QMainWindow):
                 continue
         if records:
             put_on_clipboard(document_payload(records))
+
+    def _toggle_results(self) -> None:
+        """Replie/déplie le bloc du bas (Rendu / Markdown-HTML / Texte brut)."""
+        if self.results.isVisible():
+            self._results_sizes = self.center_split.sizes()
+            self.results.setVisible(False)
+            self.results_btn.setText("Résultat ▴")
+            self.preview.fit_page()
+        else:
+            self.results.setVisible(True)
+            self.results_btn.setText("Résultat ▾")
+            self.center_split.setSizes(self._results_sizes)
+            self.preview.fit_page()
 
     def _open_settings(self) -> None:
         from PySide6.QtWidgets import QApplication

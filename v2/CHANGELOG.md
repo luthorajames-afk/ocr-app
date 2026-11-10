@@ -94,8 +94,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
   comparaison détachable dans une fenêtre autonome (« Détacher / Épingler ») :
   fenêtre de premier niveau déplaçable (multi-écrans), aperçu original étendu
   à tout l'espace vacant, ré-épinglage automatique à la fermeture.
-- Panneau résultat repliable : bouton « Replier / Déplier » (mémorise les
-  tailles du splitter) pour agrandir l'aperçu original.
+- Bloc du bas (Rendu / Markdown-HTML / Texte brut) repliable via le bouton
+  « Résultat ▾ / ▴ » de la barre d'outils : splitter vertical mémorisé,
+  l'aperçu original occupe l'espace libéré.
 - Réglages : dialogue regroupant DPI (150/200/300), thème, langue du
   document (relance l'OCR si changée) et « À propos » ; QSettings persistant.
 - Worker : option `--lang` transmise au moteur (fra/eng/fra+eng).
