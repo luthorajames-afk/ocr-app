@@ -30,6 +30,13 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - T2.6 : analyse d'ablation `--ablation` (brut / prétraité / +lexique) ;
   seuils ajustés sur mesures : binarisation opt-in, deskew auto > 2° —
   CER scans 56,29 % → 49,91 % (−6,38 pts) ; rapport `docs/T2.6_ablation.md`.
+- T3.1 : `core/pipeline/protocol.py` — messages JSON Lines validés par Pydantic
+  (discriminated union, champs stricts, erreurs explicites).
+- T3.2 : `workers/worker_main.py` — progression par étape, pause/reprise
+  coopératives, annulation immédiate (< 2 s) même pendant l'OCR.
+- T3.3 : `core/pipeline/job_store.py` — `page_schema` versionné, écriture
+  atomique page par page, reprise après panne (pages déjà sauvegardées).
+  Tests : 8 unitaires protocole/store + 4 intégration subprocess.
 
 ## [0.1.0-alpha.0] — 2026-11-10
 

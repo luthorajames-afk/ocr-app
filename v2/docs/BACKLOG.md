@@ -26,9 +26,9 @@ Rôles : [Planificateur] → [Implémenteur] → [Testeur] → [Relecteur Sécur
 
 ## Phase 3 : Infrastructure Asynchrone du Worker
 
-- [ ] **T3.1** Protocole JSON Lines via stdin/stdout.
-- [ ] **T3.2** Signaux : traitement par page, progression, pause, reprise, annulation (`abort`).
-- [ ] **T3.3** Sauvegarde prévoyante page par page (`page_schema.json`) + reprise sur panne.
+- [x] **T3.1** Protocole JSON Lines via stdin/stdout.
+- [x] **T3.2** Signaux : traitement par page, progression, pause, reprise, annulation (`abort`).
+- [x] **T3.3** Sauvegarde prévoyante page par page (`page_schema.json`) + reprise sur panne.
 
 ## Phase 3b : Couche d'Acquisition Matérielle (Scanner Physique)
 
