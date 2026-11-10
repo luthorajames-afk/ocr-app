@@ -80,6 +80,8 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - Colonnes : texte reconstruit dans l'ordre de lecture (pas l'ordre brut
   de la couche PDF) ; rendu côte à côte via tableau HTML (QTextBrowser
   ne supporte pas flexbox).
+- Aperçu : le worker écrit `page_NNN.png` (rendu 300 DPI) à côté du JSON —
+  l'aperçu « Original » affiche enfin le document (plus de carré blanc).
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 

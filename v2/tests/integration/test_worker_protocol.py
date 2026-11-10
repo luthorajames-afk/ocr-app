@@ -106,6 +106,8 @@ def test_progress_and_page_done_with_saved_files(tmp_path: Path) -> None:
         done = driver.wait_for(lambda m: m.get("type") == "page_done")
         assert done["page"] == 1
         assert Path(done["result_path"]).is_file()
+        # Plan v2 : une image ET un JSON par page (aperçu « Original »).
+        assert (work / "page_001.png").is_file()
         assert Path(done["result_path"]).parent == work.resolve()
         assert any(
             m.get("type") == "progress" and m.get("stage") == "ocr"

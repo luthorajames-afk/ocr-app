@@ -202,6 +202,10 @@ class Worker:
                         text=text,
                         blocks=blocks,
                     )
+                    # Image de la page (plan v2 : une image ET un JSON par page),
+                    # utilisée par l'aperçu « Original » de l'IHM.
+                    png_path = self.work_dir / f"page_{page.number:03d}.png"
+                    page.image.save(png_path, format="PNG", dpi=(self.dpi, self.dpi))
                     path = save_page(record, self.work_dir)
                     if not self._checkpoint(page.number, total, "save"):
                         break
@@ -257,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     _preload(args.mode)
     work_dir = Path(args.work_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
     worker = Worker(
         input_path,
         work_dir,
