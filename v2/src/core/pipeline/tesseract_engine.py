@@ -88,28 +88,93 @@ class TesseractEngine(OcrEngine):
             duration_ms=(time.perf_counter() - started) * 1000.0,
         )
 
-    def _extract_blocks(self, image: Image.Image) -> list[OcrBlock]:
-        """Blocs par ligne de texte avec bbox (points, origine haut-gauche)."""
+    def process_region(
+        self,
+        image: Image.Image,
+        bbox: tuple[float, float, float, float],
+        *,
+        languages: Sequence[str] | None = None,
+    ) -> str:
+        """OCR d'une zone (points, origine haut-gauche) — seconde passe T2.4.
+
+        ``image`` doit être rendue à 300 DPI (convention des bboxes).
+        """
+        if self._api is None:
+            self.initialize()
         assert self._api is not None
-        dpi = 300.0
-        scale = 72.0 / dpi
-        blocks: list[OcrBlock] = []
+        if languages:
+            self._api.Init(path=str(self._tessdata), lang="+".join(languages))
+
+        scale = 300.0 / 72.0
+        x0, y0, x1, y1 = bbox
+        left = max(0, int(x0 * scale) - 4)
+        top = max(0, int(y0 * scale) - 4)
+        right = min(image.width, int(x1 * scale) + 4)
+        bottom = min(image.height, int(y1 * scale) + 4)
+        if right <= left or bottom <= top:
+            return ""
+        crop = image.crop((left, top, right, bottom))
+        self._api.SetImage(crop if crop.mode == "RGB" else crop.convert("RGB"))
+        return (self._api.GetUTF8Text() or "").strip()
+
+    def _extract_blocks(self, image: Image.Image) -> list[OcrBlock]:
+        """Lignes de texte avec bbox (points, origine haut-gauche) et confiance.
+
+        S'appuie sur la sortie TSV de Tesseract : les mots sont agrégés par
+        ligne (block/par/line) pour obtenir texte et confiance moyenne — la
+        seconde passe (T2.4) cible les lignes sous le seuil.
+        """
+        assert self._api is not None
+        scale = 72.0 / 300.0  # bboxes en points pour une page rendue à 300 DPI
         try:
-            components = self._api.GetComponentImages(
-                tesserocr.RIL.TEXTLINE, True, text_only=True
+            raw = self._api.GetTSVText()
+        except Exception:  # noqa: BLE001 — moteur sans TSV
+            return []
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+
+        lines: dict[tuple[str, str, str, str], dict[str, float | str]] = {}
+        for row in (raw or "").splitlines()[1:]:
+            parts = row.split("\t")
+            if len(parts) < 12 or parts[0] != "5":  # niveau mot
+                continue
+            try:
+                left, top, width, height = (int(parts[6]), int(parts[7]), int(parts[8]), int(parts[9]))
+                confidence = float(parts[10])
+            except (ValueError, IndexError):
+                continue
+            word = parts[11].strip()
+            if not word:
+                continue
+            key = (parts[1], parts[2], parts[3], parts[4])
+            entry = lines.setdefault(
+                key,
+                {"text": "", "x0": 1e12, "y0": 1e12, "x1": 0.0, "y1": 0.0, "conf": 0.0, "n": 0.0},
             )
-        except Exception:  # noqa: BLE001 — tesserocr sans layout fiable
-            return blocks
-        for _index, box, _image, _para in components:
-            left, top, right, bottom = box["x"], box["y"], box["x"] + box["w"], box["y"] + box["h"]
-            blocks.append(
-                OcrBlock(
-                    text="",
-                    bbox=(left * scale, top * scale, right * scale, bottom * scale),
-                    confidence=0.0,
-                    kind="line",
-                )
+            entry["text"] = f"{entry['text']} {word}".strip()
+            entry["x0"] = min(float(entry["x0"]), float(left))
+            entry["y0"] = min(float(entry["y0"]), float(top))
+            entry["x1"] = max(float(entry["x1"]), float(left + width))
+            entry["y1"] = max(float(entry["y1"]), float(top + height))
+            entry["conf"] = float(entry["conf"]) + confidence
+            entry["n"] = float(entry["n"]) + 1.0
+
+        blocks = [
+            OcrBlock(
+                text=str(entry["text"]),
+                bbox=(
+                    float(entry["x0"]) * scale,
+                    float(entry["y0"]) * scale,
+                    float(entry["x1"]) * scale,
+                    float(entry["y1"]) * scale,
+                ),
+                confidence=(float(entry["conf"]) / float(entry["n"]) / 100.0),
+                kind="line",
             )
+            for entry in lines.values()
+            if float(entry["n"]) > 0
+        ]
+        blocks.sort(key=lambda block: (round(block.bbox[1], 1), block.bbox[0]))
         return blocks
 
     def shutdown(self) -> None:

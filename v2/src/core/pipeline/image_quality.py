@@ -17,7 +17,7 @@ from PIL import Image
 
 SHARP_THRESHOLD = 120.0
 LOW_CONTRAST_THRESHOLD = 32.0
-SKEW_TOLERANCE = 0.75
+SKEW_TOLERANCE = 2.0
 
 
 @dataclass(frozen=True, slots=True)

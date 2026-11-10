@@ -1,0 +1,17 @@
+{
+  "brut": {
+    "n": 7,
+    "mean_cer": 0.5629,
+    "mean_wer": 0.695
+  },
+  "pretraite": {
+    "n": 7,
+    "mean_cer": 0.4991,
+    "mean_wer": 0.6542
+  },
+  "pretraite+lexique": {
+    "n": 7,
+    "mean_cer": 0.5017,
+    "mean_wer": 0.6634
+  }
+}

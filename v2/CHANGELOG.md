@@ -22,6 +22,14 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - T2.3 : `core/pipeline/preprocess.py` — redressement automatique, binarisation
   Sauvola locale (moyenne/écart-type par image intégrale), suréchantillonnage DPI
   (150–300), décision pilotée par le triage ; 9 tests.
+- T2.4 : `core/pipeline/second_pass.py` — seconde passe ciblée sur les lignes
+  sous confiance + vote bi-moteur (garde-fou chiffres, tie-break accents) ;
+  Tesseract expose désormais texte/confiance par ligne (TSV).
+- T2.5 : `core/pipeline/lexicon.py` — post-correction lexique juridique/gestion,
+  références (articles, décrets, dates, montants, IBAN, e-mails) intouchables ; 8 tests.
+- T2.6 : analyse d'ablation `--ablation` (brut / prétraité / +lexique) ;
+  seuils ajustés sur mesures : binarisation opt-in, deskew auto > 2° —
+  CER scans 56,29 % → 49,91 % (−6,38 pts) ; rapport `docs/T2.6_ablation.md`.
 
 ## [0.1.0-alpha.0] — 2026-11-10
 

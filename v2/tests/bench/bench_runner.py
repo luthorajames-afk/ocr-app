@@ -27,6 +27,14 @@ from core.pipeline.tesseract_engine import TesseractEngine
 DATA = V2_ROOT / "tests" / "data"
 
 
+class ManifestEntry(TypedDict):
+    id: str
+    document: str
+    truth: str
+    theme: str
+    difficulty: str
+
+
 class BenchRow(TypedDict):
     id: str
     theme: str
@@ -72,11 +80,18 @@ def wer(hypothesis: str, reference: str) -> float:
     return edit_distance(hyp_words, ref_words) / len(ref_words)
 
 
-def run(limit: int | None = None) -> dict[str, object]:
+def _select(limit: int | None, theme: str | None) -> list[ManifestEntry]:
     manifest = json.loads((DATA / "manifest.json").read_text(encoding="utf-8"))
-    entries = manifest["documents"]
+    entries: list[ManifestEntry] = list(manifest["documents"])
+    if theme:
+        entries = [entry for entry in entries if entry.get("theme") == theme]
     if limit:
         entries = entries[:limit]
+    return entries
+
+
+def run(limit: int | None = None, theme: str | None = None) -> dict[str, object]:
+    entries = _select(limit, theme)
 
     engine = TesseractEngine()
     results: list[BenchRow] = []
@@ -133,13 +148,84 @@ def run(limit: int | None = None) -> dict[str, object]:
     }
 
 
+def ablation(limit: int | None = None, theme: str | None = None) -> dict[str, dict[str, float]]:
+    """T2.6 — Ablation : brut vs pretraite vs pretraite+lexique.
+
+    Retourne le CER/WER moyen par configuration sur le même échantillon.
+    """
+    from core.pipeline.lexicon import correct_text
+    from core.pipeline.preprocess import preprocess
+
+    entries = _select(limit, theme)
+
+    configs: dict[str, dict[str, bool]] = {
+        "brut": {"preprocess": False, "lexicon": False},
+        "pretraite": {"preprocess": True, "lexicon": False},
+        "pretraite+lexique": {"preprocess": True, "lexicon": True},
+    }
+    engine = TesseractEngine()
+    scores: dict[str, list[tuple[float, float]]] = {name: [] for name in configs}
+    try:
+        engine.initialize()
+        for entry in entries:
+            document = DATA / entry["document"]
+            truth = (DATA / entry["truth"]).read_text(encoding="utf-8")
+            pages = load_document(document, dpi=200)
+            page_texts: dict[str, list[str]] = {name: [] for name in configs}
+            for page in pages:
+                if page.has_native_text:
+                    for name in configs:
+                        page_texts[name].append(page.native_text)
+                    continue
+                for name, options in configs.items():
+                    image = page.image
+                    if options["preprocess"]:
+                        image = preprocess(image).image
+                    text = engine.process(image).text
+                    if options["lexicon"]:
+                        text = correct_text(text).text
+                    page_texts[name].append(text)
+            for name, parts in page_texts.items():
+                hypothesis = "\n".join(parts)
+                scores[name].append((cer(hypothesis, truth), wer(hypothesis, truth)))
+    finally:
+        engine.shutdown()
+
+    report: dict[str, dict[str, float]] = {}
+    for name, values in scores.items():
+        if not values:
+            continue
+        report[name] = {
+            "n": len(values),
+            "mean_cer": round(sum(v[0] for v in values) / len(values), 4),
+            "mean_wer": round(sum(v[1] for v in values) / len(values), 4),
+        }
+    return report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Banc CER/WER AOCRI v2")
+    parser.add_argument("--ablation", action="store_true", help="analyse d'ablation T2.6")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--theme", default=None, help="filtrer par thème (scan, facture, …)")
     parser.add_argument("--json", default=None, help="écrire le rapport JSON")
     args = parser.parse_args()
 
-    report = run(args.limit)
+    if args.ablation:
+        ablation_report = ablation(args.limit, args.theme)
+        for name, value in ablation_report.items():
+            print(
+                f"{name:20s} CER {value['mean_cer']:.2%} · WER {value['mean_wer']:.2%} "
+                f"({value['n']} docs)"
+            )
+        if args.json:
+            Path(args.json).write_text(
+                json.dumps(ablation_report, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            print(f"Rapport : {args.json}")
+        return 0
+
+    report = run(args.limit, args.theme)
     print(f"\nCER moyen {report['mean_cer']:.2%} · WER moyen {report['mean_wer']:.2%}")
     if args.json:
         Path(args.json).write_text(

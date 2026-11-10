@@ -108,16 +108,18 @@ def preprocess(
     dpi: int | None = None,
     config: PreprocessConfig | None = None,
 ) -> PreprocessResult:
-    """Applique le prétraitement adaptatif et retourne l'image + journal."""
+    """Applique le prétraitement adaptatif et retourne l'image + journal.
+
+    Politique par défaut (mesurée T2.6) :
+    - deskew automatique si inclinaison détectée (gain constaté) ;
+    - Sauvola opt-in uniquement (la binarisation automatique dégrade le CER
+      sur le corpus 2026 : 37,6 % brut vs 42,0 % binarisé sur scans).
+    """
     config = config or PreprocessConfig()
     quality_before = triage(image)
 
     do_deskew = config.deskew if config.deskew is not None else quality_before.is_skewed
-    do_binarize = (
-        config.binarize
-        if config.binarize is not None
-        else (quality_before.is_low_contrast or quality_before.is_blurry)
-    )
+    do_binarize = bool(config.binarize)
 
     applied: list[str] = []
     result = image.convert("RGB")
