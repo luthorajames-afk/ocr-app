@@ -19,6 +19,9 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
 - T2.1 : `tests/bench/bench_runner.py` — CER, WER, agrégats par thème, rapport JSON.
 - T2.2 : `core/pipeline/image_quality.py` — variance du Laplacien, contraste RMS,
   inclinaison par profils de projection (sans cv2) ; 10 tests.
+- T2.3 : `core/pipeline/preprocess.py` — redressement automatique, binarisation
+  Sauvola locale (moyenne/écart-type par image intégrale), suréchantillonnage DPI
+  (150–300), décision pilotée par le triage ; 9 tests.
 
 ## [0.1.0-alpha.0] — 2026-11-10
 
