@@ -70,6 +70,13 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
   titres détectés par hauteur) ; onglet Rendu structuré (titres h2, colonnes).
 - Prétraitement automatique T2.3 appliqué avant l'OCR dans le worker
   (deskew > 2°, binarisation opt-in).
+- Tableaux natifs reconstruits avant le découpage en colonnes (grille 6×6
+  sur fact_001), rendus HTML et copiés en HTML/Markdown.
+- Aperçu comparatif Original (image) / Résultat (texte rendu) + navigation
+  entre pages.
+- Étalonnage qualité OCR : `core/pipeline/calibration.py` (CER/WER,
+  confiance moyenne, blocs sous seuil, verdict) + dialogue « Étalonnage… »
+  avec export JSON ; tests unitaires et IHM.
 
 ## Backlog v2 terminé (T0.1 → T6.1)
 

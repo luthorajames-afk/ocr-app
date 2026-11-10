@@ -334,6 +334,8 @@ class MainWindow(QMainWindow):
             self._modes[key] = button
         self._update_mode_availability()
         add = QPushButton("Fichiers", bar)
+        calibrate = QPushButton("Étalonnage…", bar)
+        calibrate.clicked.connect(self._open_calibration)
         add.clicked.connect(self._pick_files)
         scan = QPushButton("Scanner…", bar)
         scan.setEnabled(False)
@@ -342,6 +344,8 @@ class MainWindow(QMainWindow):
         info.setObjectName("Muted")
         layout.addWidget(group)
         layout.addWidget(add)
+        self.calibrate_btn = calibrate
+        layout.addWidget(calibrate)
         layout.addWidget(scan)
         layout.addStretch(1)
         layout.addWidget(info)
@@ -513,6 +517,15 @@ class MainWindow(QMainWindow):
                 continue
         if records:
             put_on_clipboard(document_payload(records))
+
+    def _open_calibration(self) -> None:
+        from core.gui.calibration_dialog import CalibrationDialog
+
+        task = self._current_task
+        if task is None or task.pages_done == 0:
+            self.bottom.label.setText("Étalonnage : traitez d'abord un document")
+            return
+        CalibrationDialog(task.work_dir, self).exec()
 
     def _export(self) -> None:
         task = self._current_task
