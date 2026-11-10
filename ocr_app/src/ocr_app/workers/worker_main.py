@@ -12,6 +12,10 @@ délègue le traitement de chaque page au pipeline réel par mode :
   texte natif d'un PDF est utilisé sans OCR, segmenté en blocs réels) ;
 - mode ``advanced``  : Docling réel (``AdvancedWorker`` + ``DoclingEngine``)
   dans le venv d'évaluation dédié (R1/R13) ;
+- mode ``approfondi`` : même backend Docling + prétraitement interactif —
+  ``--preset`` / ``--filter-json`` (filtres d'image, cf.
+  ``core/preprocessing.py``) et ``--exclude`` (zones d'exclusion, points
+  PDF) ; sans filtre ni zone, le document original est remis à Docling ;
 - mode ``medium``    : pages « placeholder » produites par le worker
   squelette — la boucle protocole reste complète et fonctionnelle.
 
@@ -50,12 +54,14 @@ que les chemins accentués (R14) et les messages français restent lisibles.
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import re
 import sys
 import threading
 import traceback
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from ocr_app.core.data_model import Block, BlockType, Page
 from ocr_app.core.pipeline import Pipeline, PipelineConfig, PipelineStage, PipelineError
@@ -89,15 +95,99 @@ POLL_INTERVAL = 0.02
 
 CANCELLED_MESSAGE = "annulé : traitement interrompu par l'interface"
 
-MODES = ("simple", "medium", "advanced")
+MODES = ("simple", "medium", "advanced", "approfondi")
 
 # Confiance indicative des pages placeholder (aucun OCR réel effectué).
-_PLACEHOLDER_CONFIDENCE = {"simple": 0.97, "medium": 0.90, "advanced": 0.98}
+_PLACEHOLDER_CONFIDENCE = {
+    "simple": 0.97,
+    "medium": 0.90,
+    "advanced": 0.98,
+    "approfondi": 0.98,
+}
 
 # Codes de langue Tesseract acceptés par --lang : lettres/underscores séparés
 # par « + » (fra+eng, fra, eng, chi_sim…). La disponibilité réelle des données
 # est vérifiée par le moteur (repli contrôlé, cf. core/ocr_engine.py).
 _LANG_RE = re.compile(r"^[A-Za-z_]{2,32}(\+[A-Za-z_]{2,32})*$")
+
+
+def parse_exclude_zones(
+    raw: Optional[str],
+) -> Tuple[Tuple[float, float, float, float], ...]:
+    """Analyse ``--exclude "x0,y0,x1,y1;x0,y0,x1,y1;…"`` (points PDF).
+
+    Chaque rectangle est normalisé (x0 ≤ x1, y0 ≤ y1) ; une zone dégénérée
+    (surface nulle) est ignorée ; une partie mal formée lève ``ValueError``
+    (erreur d'usage → code 2, comme un mode inconnu).
+    """
+    if raw is None or not str(raw).strip():
+        return ()
+    zones: list[Tuple[float, float, float, float]] = []
+    for part in str(raw).split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        coords = part.split(",")
+        if len(coords) != 4:
+            raise ValueError(
+                f"--exclude invalide : rectangle « x0,y0,x1,y1 » attendu, "
+                f"« {part} » reçu"
+            )
+        try:
+            x0, y0, x1, y1 = (float(coord.strip()) for coord in coords)
+        except ValueError:
+            raise ValueError(
+                f"--exclude invalide : coordonnées numériques attendues, "
+                f"« {part} » reçu"
+            ) from None
+        # NaN/inf (« nan » se parse comme un float) : erreur d'usage claire
+        # plutôt qu'une zone qui passerait toutes les gardes d'ordre.
+        if not all(math.isfinite(value) for value in (x0, y0, x1, y1)):
+            raise ValueError(
+                f"--exclude invalide : coordonnées finies attendues, "
+                f"« {part} » reçu"
+            )
+        if x0 > x1:
+            x0, x1 = x1, x0
+        if y0 > y1:
+            y0, y1 = y1, y0
+        if x1 <= x0 or y1 <= y0:
+            continue
+        zones.append((x0, y0, x1, y1))
+    return tuple(zones)
+
+
+def parse_filter_params(
+    filter_json: Optional[str], preset: Optional[str]
+) -> Optional[dict]:
+    """Résout les paramètres de filtre du mode Approfondi.
+
+    ``--filter-json`` (objet JSON de filtres, cf.
+    ``core/preprocessing.normalize_params``) est PRIORITAIRE sur
+    ``--preset``. Sans aucun des deux : ``None`` (aucun filtre, document
+    original remis au moteur). Imports paresseux : numpy n'est chargé que
+    si des filtres sont réellement demandés.
+    """
+    if filter_json is not None and str(filter_json).strip():
+        try:
+            data = json.loads(str(filter_json))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"--filter-json invalide (JSON illisible) : {exc}"
+            ) from None
+        if not isinstance(data, dict):
+            raise ValueError(
+                "--filter-json invalide : objet JSON attendu "
+                f"({type(data).__name__} reçu)"
+            )
+        from ocr_app.core.preprocessing import normalize_params
+
+        return normalize_params(data)
+    if preset is not None:
+        from ocr_app.core.preprocessing import preset_params
+
+        return preset_params(preset)
+    return None
 
 
 class _Cancelled(Exception):
@@ -115,6 +205,12 @@ def _placeholder_text(mode: str, page_number: int) -> str:
         return (
             f"[page {page_number}] mode Avancé : simulation sans --input "
             f"(Docling s'exécute dans le venv d'évaluation) — accents : éèàç."
+        )
+    if mode == "approfondi":
+        return (
+            f"[page {page_number}] mode Approfondi : simulation sans --input "
+            f"(backend Avancé Docling — filtres et zones d'exclusion) — "
+            f"accents : éèàç."
         )
     if mode == "medium":
         return (
@@ -189,6 +285,9 @@ class WorkerMain:
         models_dir: Optional[str] = None,
         page: Optional[int] = None,
         language: Optional[str] = None,
+        preset: Optional[str] = None,
+        filter_json: Optional[str] = None,
+        exclude: Optional[str] = None,
     ) -> None:
         self.mode = str(mode).strip().lower()
         if self.mode not in MODES:
@@ -227,6 +326,14 @@ class WorkerMain:
                 )
             self.language = wanted
 
+        # Mode Approfondi : filtres d'image (--filter-json prioritaire sur
+        # --preset) et zones d'exclusion (--exclude, points PDF). Valeur
+        # invalide : erreur d'usage propre (ValueError → code 2).
+        self.filter_params: Optional[dict] = parse_filter_params(
+            filter_json, preset
+        )
+        self.excluded_zones = parse_exclude_zones(exclude)
+
         self._out = _ProtocolOutput()
 
         # _stop : annulation ou fin de stdin. _proceed : non pause (set = actif).
@@ -260,6 +367,16 @@ class WorkerMain:
             f"{'document ' + str(self.input_path) if self.input_path else f'{self.total_pages} page(s) simulée(s)'}, "
             + (f"page {self.single_page} seule, " if self.single_page else "")
             + (f"langues {self.language}, " if self.language else "")
+            + (
+                f"preset/filtres oui ({len(self.filter_params)} clés), "
+                if self.filter_params
+                else ""
+            )
+            + (
+                f"{len(self.excluded_zones)} zone(s) d'exclusion, "
+                if self.excluded_zones
+                else ""
+            )
             + f"dossier de travail {self.work_dir}"
         )
         self._prewarm_engine()
@@ -320,17 +437,18 @@ class WorkerMain:
     def _prewarm_engine(self) -> None:
         """Précharge les dépendances lourdes du mode dans le thread principal.
 
-        Mode Avancé uniquement : l'import de Docling (qui tire numpy et ses
-        DLL natives) doit avoir lieu AVANT le démarrage du lecteur de
-        commandes. Une fois qu'un thread est bloqué en lecture du tube
-        stdin, le chargement de l'extension C de numpy peut rester bloqué
-        indéfiniment (verrou du chargeur DLL Windows — voir la note de
-        ``core.advanced_engine.import_document_converter`` ; ``tesserocr``
-        n'est pas concerné). L'import reste paresseux (R1) : il n'a lieu que
-        pour le mode Avancé avec un document réel, et un échec n'est pas
-        fatal ici — le moteur produira l'erreur de protocole appropriée.
+        Mode Avancé (et Approfondi, même backend) uniquement : l'import de
+        Docling (qui tire numpy et ses DLL natives) doit avoir lieu AVANT le
+        démarrage du lecteur de commandes. Une fois qu'un thread est bloqué
+        en lecture du tube stdin, le chargement de l'extension C de numpy
+        peut rester bloqué indéfiniment (verrou du chargeur DLL Windows —
+        voir la note de ``core.advanced_engine.import_document_converter`` ;
+        ``tesserocr`` n'est pas concerné). L'import reste paresseux (R1) :
+        il n'a lieu que pour ces modes avec un document réel, et un échec
+        n'est pas fatal ici — le moteur produira l'erreur de protocole
+        appropriée.
         """
-        if self.mode != "advanced" or not self.input_path:
+        if self.mode not in ("advanced", "approfondi") or not self.input_path:
             return
         try:
             from ocr_app.core.advanced_engine import import_document_converter
@@ -413,13 +531,21 @@ class WorkerMain:
             renderer.close()
 
     def _build_pipeline(self, displayed_total: int) -> Pipeline:
-        """Pipeline du mode courant + callback d'étapes + langues (--lang)."""
+        """Pipeline du mode courant + callback d'étapes + langues (--lang).
+
+        Mode Approfondi : les filtres (``--filter-json``/``--preset``) et les
+        zones d'exclusion (``--exclude``) sont portés par ``PipelineConfig``
+        (cf. ``core/pipeline.py``) ; sans eux, le document original est
+        remis au moteur (chemin Avancé historique).
+        """
         pipeline = Pipeline(
             PipelineConfig(
                 mode=self.mode,
                 dpi=self.dpi,
                 work_dir=str(self.work_dir),
                 models_dir=self.models_dir,
+                excluded_zones=self.excluded_zones,
+                filter_params=self.filter_params,
             )
         )
         self._inject_language(pipeline)
@@ -725,6 +851,31 @@ def build_parser() -> argparse.ArgumentParser:
             "(ex. fra+eng ; défaut : fra+eng)"
         ),
     )
+    parser.add_argument(
+        "--preset",
+        default=None,
+        help=(
+            "mode Approfondi : preset de filtres (ink, yellowed, "
+            "low_contrast, phone_photo) ; ignoré si --filter-json est fourni"
+        ),
+    )
+    parser.add_argument(
+        "--filter-json",
+        default=None,
+        help=(
+            "mode Approfondi : filtres d'image en JSON (brightness, contrast, "
+            "shadow_removal, denoise, binarize…) — prioritaire sur --preset"
+        ),
+    )
+    parser.add_argument(
+        "--exclude",
+        default=None,
+        help=(
+            "mode Approfondi : zones d'exclusion en points PDF, "
+            "« x0,y0,x1,y1;x0,y0,x1,y1 » — peintes en blanc et blocs "
+            "intersectant retirés"
+        ),
+    )
     return parser
 
 
@@ -742,6 +893,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             models_dir=args.models_dir,
             page=args.page,
             language=args.lang,
+            preset=args.preset,
+            filter_json=args.filter_json,
+            exclude=args.exclude,
         )
     except ValueError as exc:
         _log(str(exc))

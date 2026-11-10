@@ -7,9 +7,10 @@ puis recharge chaque page sauvegardée par le worker (R6/R14).
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from PySide6.QtCore import QCoreApplication, QObject, QTimer, Signal
 
@@ -98,6 +99,9 @@ class TaskRunner(QObject):
         # ciblées d'une page (--page) et compteur global des lots.
         self._settings_args: tuple[str, ...] = ()
         self._relaunch_pages: Dict[str, int] = {}
+        # Mode Approfondi : paramètres par tâche — zones d'exclusion (points
+        # PDF → --exclude) et filtres d'image (dict → --filter-json).
+        self._deep_params: Dict[str, Tuple[tuple, Optional[dict]]] = {}
         self._batch_ids: set = set()
         self._batch_counted: set = set()
         self._batch_total = 0
@@ -218,6 +222,32 @@ class TaskRunner(QObject):
         """Numéro de page ciblé par une tâche de relance (None sinon)."""
         return self._relaunch_pages.get(task_id)
 
+    # --- Paramètres Approfondi (filtres + zones d'exclusion) ---------------
+    def set_task_deep_params(
+        self,
+        task_id: str,
+        zones: Sequence[Sequence[float]],
+        filter_params: Optional[dict],
+    ) -> None:
+        """Attache les paramètres Approfondi à une tâche (relance de page).
+
+        Au démarrage, si le worker réel est sélectionné (jamais vers le
+        worker factice de développement), les zones sont passées via
+        ``--exclude "x0,y0,x1,y1;…"`` (points PDF) et les filtres via
+        ``--filter-json <objet JSON>`` (cf. ``core/preprocessing.py``).
+        """
+        normalized_zones = tuple(
+            tuple(float(coord) for coord in zone) for zone in (zones or ())
+        )
+        self._deep_params[str(task_id)] = (normalized_zones, filter_params)
+
+    @staticmethod
+    def _format_exclude_zones(zones: Sequence[Sequence[float]]) -> str:
+        """Zones → ``"x0,y0,x1,y1;x0,y0,x1,y1"`` (points PDF, format compact)."""
+        return ";".join(
+            ",".join(f"{float(coord):g}" for coord in zone) for zone in zones
+        )
+
     def is_document_busy(self, source_path: str) -> bool:
         """Vrai si une tâche du même document est en cours ou en pause.
 
@@ -327,6 +357,21 @@ class TaskRunner(QObject):
                 extra_args += ("--page", str(relaunch_page))
             if accepts_real and self._settings_args:
                 extra_args += self._settings_args
+            # Mode Approfondi : zones d'exclusion + filtres d'image, jamais
+            # vers le worker factice (il ne connaît pas ces options).
+            deep_params = self._deep_params.get(task_id)
+            if accepts_real and deep_params is not None:
+                deep_zones, deep_filters = deep_params
+                if deep_zones:
+                    extra_args += (
+                        "--exclude",
+                        self._format_exclude_zones(deep_zones),
+                    )
+                if deep_filters:
+                    extra_args += (
+                        "--filter-json",
+                        json.dumps(deep_filters, ensure_ascii=False),
+                    )
 
             if not self._worker.start(
                 total,
@@ -637,6 +682,7 @@ class TaskRunner(QObject):
         self._pages.clear()
         self._start_error = None
         self._relaunch_pages.clear()
+        self._deep_params.clear()
         self._reset_batch()
         self._queue = TaskQueue()
         self._queue.set_on_change(self._emit_task_changed)

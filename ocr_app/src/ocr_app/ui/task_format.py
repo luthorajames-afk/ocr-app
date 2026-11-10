@@ -32,6 +32,7 @@ MODE_LABELS = {
     "simple": "Simple",
     "medium": "Moyen",
     "advanced": "Avancé",
+    "approfondi": "Approfondi",
 }
 
 

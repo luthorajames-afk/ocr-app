@@ -18,6 +18,7 @@ barre d'outils.
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -25,15 +26,21 @@ from typing import List, Optional, Tuple
 from PySide6.QtCore import (
     QCoreApplication,
     QEventLoop,
+    QObject,
     QPoint,
+    QRunnable,
     QStandardPaths,
     Qt,
+    QThreadPool,
     QUrl,
+    Signal,
 )
 from PySide6.QtGui import (
     QDesktopServices,
     QGuiApplication,
+    QImage,
     QKeySequence,
+    QPixmap,
     QShortcut,
 )
 from PySide6.QtWidgets import (
@@ -51,7 +58,7 @@ from ocr_app.core.clipboard import document_payload, page_payload
 from ocr_app.core.data_model import Document, Page
 from ocr_app.core.exports import Exporter
 from ocr_app.core.task_queue import Task, TaskStatus
-from ocr_app.ui import file_utils
+from ocr_app.ui import exclusion_store, file_utils
 from ocr_app.ui.app_settings import (
     AppSettings,
     load_settings,
@@ -71,7 +78,13 @@ from ocr_app.ui.modules_info import demo_modules, detect_modules
 from ocr_app.ui.settings_dialog import SettingsDialog
 from ocr_app.ui.task_format import mode_label
 from ocr_app.ui.task_runner import TaskRunner
-from ocr_app.ui.worker_commands import resolve_worker_commands
+from ocr_app.ui.worker_commands import (
+    DEEP_MODE,
+    DEEP_UNAVAILABLE_MESSAGE,
+    resolve_deep_backend,
+    resolve_worker_commands,
+)
+from ocr_app.ui.widgets.deep_panel import DeepPanel
 from ocr_app.ui.widgets.file_sidebar import FileSidebar
 from ocr_app.ui.widgets.preview import PreviewPanel
 from ocr_app.ui.widgets.results_panel import ResultsPanel
@@ -87,6 +100,64 @@ def _full_window_title(dirty: bool = False) -> str:
     """Titre avec branding de version (« v1.0 ») et marque de modification."""
     marker = "● " if dirty else ""
     return f"{marker}{WINDOW_TITLE} — {VERSION_LABEL}"
+
+
+class _FilterPreviewSignals(QObject):
+    """Signaux d'un rendu filtré produit hors du thread GUI (QThreadPool)."""
+
+    done = Signal(int, object)   # token, QImage
+    failed = Signal(int, str)    # token, message
+
+
+class _FilterPreviewRunnable(QRunnable):
+    """Applique les filtres Approfondi à ``page_NNN.png`` hors du thread GUI.
+
+    L'aperçu ne doit jamais geler pendant le prétraitement (une page A4
+    300 DPI demande quelques centaines de millisecondes). Le travail passe
+    par ``QImage`` (utilisable hors thread GUI) : l'image filtrée est
+    encodée en PNG puis décodée dans le thread de travail, et seule la
+    conversion en ``QPixmap`` a lieu dans le thread GUI (récepteur).
+    """
+
+    def __init__(
+        self,
+        image_path: str,
+        params: dict,
+        signals: _FilterPreviewSignals,
+        token: int,
+    ) -> None:
+        super().__init__()
+        self.setAutoDelete(True)
+        self._image_path = image_path
+        self._params = dict(params)
+        self._signals = signals
+        self._token = int(token)
+
+    def run(self) -> None:  # noqa: D102 - QRunnable
+        try:
+            import io
+
+            from PIL import Image as PILImage
+
+            from ocr_app.core.preprocessing import apply_filters
+
+            image = PILImage.open(self._image_path)
+            try:
+                image.load()
+                filtered = apply_filters(image, self._params)
+            finally:
+                image.close()
+            buffer = io.BytesIO()
+            filtered.save(buffer, format="PNG")
+            qimage = QImage()
+            if not qimage.loadFromData(buffer.getvalue(), "PNG"):
+                raise ValueError("décodage de l'image filtrée impossible")
+        except Exception as exc:  # noqa: BLE001 - contextualisé au récepteur
+            self._signals.failed.emit(
+                self._token, f"{type(exc).__name__}: {exc}"
+            )
+            return
+        self._signals.done.emit(self._token, qimage)
 
 
 class MainWindow(QMainWindow):
@@ -116,20 +187,43 @@ class MainWindow(QMainWindow):
         # mode est installé ; message clair « module non installé » sinon.
         commands, unavailable_modes = resolve_worker_commands()
         self._unavailable_modes = dict(unavailable_modes)
+        # Mode Approfondi : même backend que le mode Avancé (Docling). La
+        # commande est dérivée du backend résolu ; sans lui, le mode est
+        # grisé dans la toolbar avec le message d'indisponibilité dédié.
+        deep_command, deep_error = resolve_deep_backend()
+        self._deep_available = deep_command is not None
+        if deep_command is not None:
+            commands = dict(commands)
+            commands[DEEP_MODE] = deep_command
+        else:
+            self._unavailable_modes[DEEP_MODE] = (
+                deep_error or DEEP_UNAVAILABLE_MESSAGE
+            )
         self._runner = TaskRunner(
             self,
             worker_commands=commands,
-            unavailable_modes=unavailable_modes,
+            unavailable_modes=self._unavailable_modes,
         )
         self._runner.set_worker_settings(
             self._settings.languages, self._settings.dpi
         )
         self._edit_session = EditSession(self)
+        # Mode Approfondi : filtre d'aperçu exécuté dans un QThreadPool
+        # (jamais dans le thread GUI) + cache de la dernière image produite.
+        self._filter_signals = _FilterPreviewSignals(self)
+        self._filter_signals.done.connect(self._on_filtered_preview_done)
+        self._filter_signals.failed.connect(self._on_filtered_preview_failed)
+        self._filter_token = 0
+        self._filtered_cache: Optional[tuple] = None
         self._build_ui()
         self._connect_signals()
 
         self._toolbar.set_settings_indicator(settings_summary(self._settings))
         self._sidebar.set_modules(detect_modules())
+        if not self._deep_available:
+            self._toolbar.set_mode_enabled(
+                DEEP_MODE, False, tooltip=DEEP_UNAVAILABLE_MESSAGE
+            )
         self._reset_view()
         if demo:
             self.load_demo()
@@ -156,6 +250,11 @@ class MainWindow(QMainWindow):
         self._sidebar = FileSidebar(self._splitter)
         self._preview = PreviewPanel(self._splitter)
         self._results = ResultsPanel(self._splitter)
+        # Panneau Approfondi : repliable SOUS l'en-tête de l'aperçu (entre
+        # l'en-tête et la vue graphique) ; visible uniquement en approfondi.
+        self._deep_panel = DeepPanel(self._preview)
+        self._deep_panel.setVisible(False)
+        self._preview.layout().insertWidget(1, self._deep_panel)
         self._splitter.addWidget(self._sidebar)
         self._splitter.addWidget(self._preview)
         self._splitter.addWidget(self._results)
@@ -178,6 +277,16 @@ class MainWindow(QMainWindow):
 
         self._sidebar.file_selected.connect(self._on_file_selected)
         self._preview.block_selected.connect(self._on_block_selected)
+        # Mode Approfondi : outils souris + zones d'exclusion de l'aperçu.
+        self._preview.zone_drawn.connect(self._on_deep_zones_changed)
+        self._preview.zone_deleted.connect(self._on_deep_zones_changed)
+        self._preview.zone_changed.connect(self._on_deep_zones_changed)
+        # Panneau Approfondi : filtres (debounce), bascule de vue, relance.
+        self._deep_panel.filters_changed.connect(
+            self._on_deep_filters_changed
+        )
+        self._deep_panel.view_mode_changed.connect(self._on_deep_view_mode)
+        self._deep_panel.apply_requested.connect(self._on_deep_apply)
         # Phase 8 : menu contextuel de l'aperçu → « Relancer cette page en… ».
         self._preview.setContextMenuPolicy(
             Qt.ContextMenuPolicy.CustomContextMenu
@@ -228,6 +337,7 @@ class MainWindow(QMainWindow):
         self._selected_id = None
         self._edit_session.clear()
         self._preview.show_placeholder()
+        self._sync_deep_state(clear_only=True)
         self._results.clear(
             "Aucun résultat à afficher — ajoutez des fichiers PDF, JPG ou PNG."
         )
@@ -458,6 +568,7 @@ class MainWindow(QMainWindow):
             self._preview.show_page(page)
             self._results.set_page(page)
             self._bottom.set_content_available(True)
+            self._sync_deep_state()
             # Nouveau document affiché : la session d'édition démarre propre
             # (instantané « origine » pris sur les pages du runner).
             self._edit_session.load_document(
@@ -466,6 +577,7 @@ class MainWindow(QMainWindow):
         else:
             self._edit_session.clear()
             self._preview.show_placeholder(title=name, info=info)
+            self._sync_deep_state(clear_only=True)
             if task.status == TaskStatus.PENDING:
                 message = "Ce document est en attente de traitement."
             elif task.status == TaskStatus.ERROR:
@@ -556,6 +668,7 @@ class MainWindow(QMainWindow):
         self._preview.show_page(page)
         self._results.set_page(page)
         self._bottom.set_content_available(True)
+        self._sync_deep_state()
         if task is not None:
             self._bottom.set_task(
                 task, title_override=self._relaunch_title(task)
@@ -705,6 +818,255 @@ class MainWindow(QMainWindow):
         self._bottom.show_toast(
             f"Relance de la page {page_number} en {mode_label(mode)}…",
             timeout=5000,
+        )
+
+    # --- Mode Approfondi (filtres + zones d'exclusion) ---------------------
+    def _on_mode_changed(self, mode: str) -> None:
+        self._mode = mode
+        deep = mode == DEEP_MODE
+        # Panneau + outils souris visibles uniquement en approfondi ; hors
+        # approfondi, l'aperçu revient à l'image originale.
+        self._deep_panel.setVisible(deep)
+        self._preview.set_deep_tools_visible(deep)
+        if deep:
+            self._sync_deep_state()
+        else:
+            self._filtered_cache = None
+            self._deep_panel.set_view_filtered(False)
+            self._preview.set_page_image(None)
+        self._bottom.show_toast(
+            f"Mode {mode_label(mode)} sélectionné pour les prochains fichiers.",
+            timeout=2200,
+        )
+
+    def _selected_deep_context(
+        self,
+    ) -> Optional[Tuple[Task, Page, str]]:
+        """(tâche, page, source) du contexte Approfondi courant, si valide.
+
+        La persistance et la relance exigent un document réel sur disque :
+        le mode démonstration (chemins fictifs) est écarté d'office.
+        """
+        if self._demo_active:
+            return None
+        task = (
+            self._runner.task(self._selected_id) if self._selected_id else None
+        )
+        page = self._selected_page()
+        if task is None or page is None or not task.source_path:
+            return None
+        source = task.source_path
+        if not Path(source).is_file():
+            return None
+        return task, page, source
+
+    def _sync_deep_state(self, clear_only: bool = False) -> None:
+        """Aligne panneau + aperçu sur l'état Approfondi persisté de la page.
+
+        Appelé à chaque affichage de page ou changement de mode : les zones
+        dessinées et les filtres mémorisés pour CETTE page sont reposés
+        (store ``ui/exclusion_store.py``), la bascule d'aperçu revient à
+        l'original et le cache d'image filtrée est invalidé.
+        """
+        self._filtered_cache = None
+        self._preview.set_page_image(None)
+        self._deep_panel.set_view_filtered(False)
+        if clear_only or self._mode != DEEP_MODE:
+            # Hors approfondi : aucun état Approfondi à l'écran (les zones
+            # restent persistées dans le store, prêtes au retour du mode).
+            self._preview.set_exclusion_zones([])
+            self._deep_panel.set_state(None)
+            self._deep_panel.set_zone_count(0)
+            return
+        context = self._selected_deep_context()
+        if context is None:
+            self._preview.set_exclusion_zones([])
+            self._deep_panel.set_state(None)
+            self._deep_panel.set_zone_count(0)
+            return
+        _task, page, source = context
+        state = exclusion_store.load_state(source, page.number)
+        self._deep_panel.set_state(state.filters)
+        self._preview.set_exclusion_zones([tuple(zone) for zone in state.zones])
+        self._deep_panel.set_zone_count(len(state.zones))
+
+    def _on_deep_zones_changed(self, *_args) -> None:
+        """Zone tracée, supprimée ou redimensionnée → persistance immédiate."""
+        context = self._selected_deep_context()
+        if context is None:
+            return
+        _task, page, source = context
+        zones = self._preview.get_exclusion_zones()
+        self._deep_panel.set_zone_count(self._preview.zone_count())
+        try:
+            exclusion_store.save_state(
+                source, page.number, zones, self._deep_panel.get_filter_params()
+            )
+        except OSError as exc:
+            self._bottom.show_toast(
+                f"Zones non enregistrées : {exc}", error=True, timeout=7000
+            )
+
+    def _on_deep_filters_changed(self, params: dict) -> None:
+        """Filtres changés (debounce 250 ms) → persistance + aperçu filtré."""
+        context = self._selected_deep_context()
+        if context is not None:
+            _task, page, source = context
+            try:
+                exclusion_store.save_state(
+                    source,
+                    page.number,
+                    self._preview.get_exclusion_zones(),
+                    self._deep_panel.get_filter_params(),
+                )
+            except OSError as exc:
+                self._bottom.show_toast(
+                    f"Filtres non enregistrés : {exc}", error=True, timeout=7000
+                )
+        # Aperçu filtré : invalidé, regénéré seulement si la bascule « Filtré »
+        # est active (le filtrage tourne dans le QThreadPool, jamais ici).
+        self._filtered_cache = None
+        if self._deep_panel.is_filtered_view():
+            self._start_filtered_preview()
+
+    def _on_deep_view_mode(self, filtered: bool) -> None:
+        """Bascule Original/Filtré de l'aperçu."""
+        if not filtered:
+            self._preview.set_page_image(None)
+            return
+        context = self._selected_deep_context()
+        if context is None:
+            self._preview.set_page_image(None)
+            return
+        _task, page, _source = context
+        cached = self._cached_filtered_pixmap(page)
+        if cached is not None:
+            self._preview.set_page_image(cached)
+            return
+        self._start_filtered_preview()
+
+    def _filtered_params(self) -> Optional[dict]:
+        return self._deep_panel.get_filter_params()
+
+    def _deep_fingerprint(self, page: Page, params: Optional[dict]) -> tuple:
+        return (
+            page.number,
+            json.dumps(params or {}, sort_keys=True),
+        )
+
+    def _cached_filtered_pixmap(self, page: Page) -> Optional["object"]:
+        """Pixmap filtré en cache pour (page, paramètres) courants, sinon None."""
+        if self._filtered_cache is None:
+            return None
+        cached_number, cached_fp, pixmap = self._filtered_cache
+        if (
+            cached_number == page.number
+            and cached_fp == json.dumps(
+                self._filtered_params() or {}, sort_keys=True
+            )
+        ):
+            return pixmap
+        return None
+
+    def _page_png_path(self, page: Page) -> Optional[Path]:
+        """Chemin de ``page_NNN.png`` du résultat de la page (si connu)."""
+        directory = getattr(page, "work_dir", None)
+        if not directory:
+            return None
+        candidate = Path(str(directory)) / f"page_{page.number:03d}.png"
+        return candidate if candidate.is_file() else None
+
+    def _start_filtered_preview(self) -> None:
+        """Lance le filtrage de la page affichée dans le QThreadPool."""
+        context = self._selected_deep_context()
+        if context is None:
+            self._bottom.show_toast(
+                "Aucune page affichée à filtrer.", error=True
+            )
+            return
+        _task, page, _source = context
+        image_path = self._page_png_path(page)
+        if image_path is None:
+            self._bottom.show_toast(
+                "Aperçu filtré indisponible (image de page absente).",
+                error=True,
+            )
+            return
+        params = self._filtered_params()
+        self._filter_token += 1
+        runnable = _FilterPreviewRunnable(
+            str(image_path),
+            params or {},
+            self._filter_signals,
+            self._filter_token,
+        )
+        QThreadPool.globalInstance().start(runnable)
+
+    def _on_filtered_preview_done(self, token: int, qimage) -> None:
+        if token != self._filter_token:
+            return  # résultat périmé (paramètres/page ont changé entre-temps)
+        pixmap = QPixmap.fromImage(qimage)
+        context = self._selected_deep_context()
+        page = context[1] if context else None
+        self._filtered_cache = (
+            page.number if page else 0,
+            json.dumps(self._filtered_params() or {}, sort_keys=True),
+            pixmap,
+        )
+        if self._deep_panel.is_filtered_view():
+            self._preview.set_page_image(pixmap)
+
+    def _on_filtered_preview_failed(self, token: int, message: str) -> None:
+        if token != self._filter_token:
+            return
+        self._bottom.show_toast(
+            f"Aperçu filtré impossible : {message}", error=True, timeout=7000
+        )
+
+    def _on_deep_apply(self) -> None:
+        """« Appliquer et relancer l'OCR de la page » (backend Approfondi).
+
+        Crée une tâche ciblée (``--input`` + ``--page`` + ``--preset``/
+        ``--filter-json`` + ``--exclude``) via la file ``TaskRunner`` ; le
+        résultat est écrit dans le dossier de travail de la nouvelle tâche,
+        le JSON d'origine n'est jamais écrasé.
+        """
+        if not self._deep_available:
+            self._bottom.show_toast(
+                DEEP_UNAVAILABLE_MESSAGE, error=True, timeout=7000
+            )
+            return
+        context = self._selected_deep_context()
+        if context is None:
+            self._bottom.show_toast(
+                "Aucune page à relancer (ajoutez d'abord un document).",
+                error=True,
+            )
+            return
+        task, page, source = context
+        if self._runner.is_document_busy(source):
+            self._bottom.show_toast(
+                "Un traitement est déjà en cours sur ce document.", error=True
+            )
+            return
+        zones = self._preview.get_exclusion_zones()
+        filter_params = self._deep_panel.get_filter_params()
+        try:
+            exclusion_store.save_state(source, page.number, zones, filter_params)
+        except OSError as exc:
+            self._bottom.show_toast(
+                f"Réglages non enregistrés : {exc}", error=True, timeout=7000
+            )
+        relaunch = self._runner.create_page_task(source, DEEP_MODE, page.number)
+        self._runner.set_task_deep_params(
+            relaunch.id, zones, filter_params
+        )
+        self._sidebar.add_task(relaunch)
+        self._runner.enqueue(relaunch.id)
+        self._select_task(relaunch.id)
+        self._refresh_pending_button()
+        self._bottom.show_toast(
+            f"Relance Approfondi de la page {page.number}…", timeout=5000
         )
 
     # --- Commandes --------------------------------------------------------
@@ -931,12 +1293,8 @@ class MainWindow(QMainWindow):
         )
 
     # --- Divers -----------------------------------------------------------
-    def _on_mode_changed(self, mode: str) -> None:
-        self._mode = mode
-        self._bottom.show_toast(
-            f"Mode {mode_label(mode)} sélectionné pour les prochains fichiers.",
-            timeout=2200,
-        )
+    # _on_mode_changed vit dans la section « Mode Approfondi » (panneau,
+    # outils et aperçu filtré y sont pilotés).
 
     # --- Lien bloc ↔ texte + édition (phase 5, R9) ------------------------
     def _on_block_selected(self, index: int) -> None:

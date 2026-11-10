@@ -30,8 +30,11 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+from PIL import Image
 
 from ocr_app.core.data_model import Block, BlockType, Cell, Table
 from ocr_app.core.pipeline import PipelineError
@@ -41,6 +44,11 @@ logger = logging.getLogger(__name__)
 
 # Dépôts Hugging Face contenant les modèles Docling (cache local, R4).
 _HF_CACHE_SUBSTRINGS = ("models--docling-project--",)
+
+# DPI supposé d'une image préparée sans métadonnée : le pipeline pose
+# ``image.info["dpi"]`` sur l'image rasterisée 300 DPI qu'il remet au moteur
+# (les bboxes Docling sont en points, déduits de ce DPI — cf. convert_document).
+_DEFAULT_PREPARED_DPI = 300.0
 
 # Labels Docling -> type de bloc du modèle de données.
 _LABEL_TO_TYPE: Dict[str, BlockType] = {
@@ -64,6 +72,20 @@ def _hf_cache_dir() -> Path:
     if home:
         return Path(home) / "hub"
     return Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def _prepared_dpi(image: Image.Image) -> float:
+    """DPI d'une image préparée (métadonnée posée par le pipeline), borné."""
+    value = (getattr(image, "info", {}) or {}).get("dpi")
+    if isinstance(value, (tuple, list)) and value:
+        value = value[0]
+    try:
+        dpi = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return _DEFAULT_PREPARED_DPI
+    if dpi != dpi or dpi <= 0:
+        return _DEFAULT_PREPARED_DPI
+    return min(dpi, 2400.0)
 
 
 def docling_models_cached() -> bool:
@@ -161,8 +183,18 @@ class DoclingEngine:
         self._converter = None
 
     # ------------------------------------------------------------ conversion
-    def convert_document(self, source_path: str) -> Dict[int, List[Block]]:
+    def convert_document(
+        self, source: Union[str, Path, Image.Image]
+    ) -> Dict[int, List[Block]]:
         """Convertit un document et retourne les blocs par numéro de page.
+
+        ``source`` est un chemin de document (PDF/JPG/PNG — qualité native,
+        chemin historique) OU une image PIL préparée par le mode Approfondi
+        (filtres + zones d'exclusion) : elle est alors écrite dans un PNG
+        temporaire — avec son DPI en métadonnée, posé par le pipeline via
+        ``image.info["dpi"]``, pour que Docling déduise des points PDF
+        cohérents avec les bboxes du document d'origine — converti, puis
+        supprimé.
 
         Retour : ``{numéro de page (1-based): [Block, …]}`` — les ``Block``
         portent type, texte, bbox (points PDF, origine haut-gauche) et
@@ -173,34 +205,62 @@ class DoclingEngine:
         if self._converter is None:
             self.initialize()
         assert self._converter is not None
-        path = Path(source_path)
+        temp_path: Optional[Path] = None
+        if isinstance(source, Image.Image):
+            temp_path = self._save_prepared_image(source)
+            path = temp_path
+        else:
+            path = Path(source)
         try:
-            result = self._converter.convert(str(path))
-        except Exception as exc:  # noqa: BLE001 - erreur Docling contextualisée
+            try:
+                result = self._converter.convert(str(path))
+            except Exception as exc:  # noqa: BLE001 - erreur Docling contextualisée
+                raise PipelineError(
+                    f"conversion Docling impossible ({path.name}) : "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+
+            status = getattr(result, "status", None)
+            status_name = str(status).rsplit(".", maxsplit=1)[-1] if status is not None else "?"
+            if status_name not in ("SUCCESS", "PARTIAL_SUCCESS"):
+                raise PipelineError(
+                    f"conversion Docling incomplète ({path.name}) : statut {status_name}"
+                )
+
+            document = result.document
+            page_sizes = self._page_sizes(document)
+            blocks_by_page: Dict[int, List[Block]] = {
+                number: [] for number in page_sizes
+            }
+            for item, _level in document.iterate_items():
+                page_number, bbox = self._item_placement(item, page_sizes)
+                block = self._item_to_block(item, page_number, bbox)
+                if block is None:
+                    continue
+                blocks_by_page.setdefault(page_number, []).append(block)
+            return blocks_by_page
+        finally:
+            if temp_path is not None:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:  # pragma: no cover - nettoyage best effort
+                    logger.debug(
+                        "PNG préparé non supprimé : %s", temp_path
+                    )
+
+    @staticmethod
+    def _save_prepared_image(image: Image.Image) -> Path:
+        """Écrit l'image préparée dans un PNG temporaire (avec son DPI)."""
+        dpi = _prepared_dpi(image)
+        handle, raw_path = tempfile.mkstemp(prefix="aocri_deep_", suffix=".png")
+        try:
+            os.close(handle)
+            image.save(raw_path, format="PNG", dpi=(dpi, dpi))
+        except (OSError, ValueError) as exc:
             raise PipelineError(
-                f"conversion Docling impossible ({path.name}) : "
-                f"{type(exc).__name__}: {exc}"
+                f"image préparée non convertible en PNG : {exc}"
             ) from exc
-
-        status = getattr(result, "status", None)
-        status_name = str(status).rsplit(".", maxsplit=1)[-1] if status is not None else "?"
-        if status_name not in ("SUCCESS", "PARTIAL_SUCCESS"):
-            raise PipelineError(
-                f"conversion Docling incomplète ({path.name}) : statut {status_name}"
-            )
-
-        document = result.document
-        page_sizes = self._page_sizes(document)
-        blocks_by_page: Dict[int, List[Block]] = {
-            number: [] for number in page_sizes
-        }
-        for item, _level in document.iterate_items():
-            page_number, bbox = self._item_placement(item, page_sizes)
-            block = self._item_to_block(item, page_number, bbox)
-            if block is None:
-                continue
-            blocks_by_page.setdefault(page_number, []).append(block)
-        return blocks_by_page
+        return Path(raw_path)
 
     # ------------------------------------------------------------ internes
     @staticmethod

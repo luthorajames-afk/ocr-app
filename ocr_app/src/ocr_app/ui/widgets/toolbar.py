@@ -21,7 +21,14 @@ MODES = (
     ("simple", "Simple"),
     ("medium", "Moyen"),
     ("advanced", "Avancé"),
+    ("approfondi", "Approfondi"),
 )
+
+# Tooltips par mode (disponibilité gérée par set_mode_enabled).
+_MODE_TOOLTIPS = {
+    "advanced": "Mode Avancé — module Docling non installé dans cette version",
+    "approfondi": "Analyse approfondie — filtres et zones d'exclusion",
+}
 
 
 class ModeSelector(QWidget):
@@ -48,10 +55,8 @@ class ModeSelector(QWidget):
             button.setObjectName("ModeButton")
             button.setCheckable(True)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
-            if mode == "advanced":
-                button.setToolTip(
-                    "Mode Avancé — module Docling non installé dans cette version"
-                )
+            if mode in _MODE_TOOLTIPS:
+                button.setToolTip(_MODE_TOOLTIPS[mode])
             self._group.addButton(button, index)
             self._buttons[index] = button
             self._ids[mode] = index
@@ -76,6 +81,25 @@ class ModeSelector(QWidget):
         index = self._ids.get(mode)
         if index is not None:
             self._buttons[index].setChecked(True)
+
+    def set_mode_enabled(
+        self, mode: str, enabled: bool, tooltip: str | None = None
+    ) -> None:
+        """Active/grise un mode (ex. Approfondi sans backend Avancé).
+
+        Un tooltip est obligatoire avec l'état grisé : sans lui, Qt
+        n'explique pas pourquoi le bouton est inactif.
+        """
+        button = self._buttons.get(self._ids.get(mode, -1))
+        if button is None:
+            return
+        button.setEnabled(bool(enabled))
+        if tooltip is not None:
+            button.setToolTip(tooltip)
+        elif enabled:
+            default = _MODE_TOOLTIPS.get(mode)
+            if default is not None:
+                button.setToolTip(default)
 
 
 class AppToolbar(QWidget):
@@ -154,6 +178,12 @@ class AppToolbar(QWidget):
 
     def set_mode(self, mode: str) -> None:
         self.mode_selector.set_mode(mode)
+
+    def set_mode_enabled(
+        self, mode: str, enabled: bool, tooltip: str | None = None
+    ) -> None:
+        """Active/grise un mode (ex. Approfondi sans backend Avancé)."""
+        self.mode_selector.set_mode_enabled(mode, enabled, tooltip=tooltip)
 
     def set_settings_indicator(self, text: str) -> None:
         """Indicateur dynamique « FR + EN · 300 DPI » (réglages, phase 8)."""

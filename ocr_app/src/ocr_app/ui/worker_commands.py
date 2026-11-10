@@ -47,6 +47,15 @@ WORKER_MAIN_MODULE = "ocr_app.workers.worker_main"
 # Modes exposés à l'interface, dans l'ordre d'affichage.
 MODES: Tuple[str, ...] = ("simple", "medium", "advanced")
 
+# Mode Approfondi : même backend que le mode Avancé (Docling). Il n'apparaît
+# PAS dans ``resolve_worker_commands`` (contrat historique : simple/medium/
+# advanced) — la commande se dérive de celle du backend Avancé via
+# :func:`resolve_deep_backend`, et l'indisponibilité porte le message dédié.
+DEEP_MODE = "approfondi"
+DEEP_UNAVAILABLE_MESSAGE = (
+    "Le mode Approfondi requiert le backend Avancé (module Docling)."
+)
+
 # Clé de module correspondant à chaque mode (core = noyau = mode simple).
 _MODE_TO_MODULE_KEY = {"simple": "core", "medium": "medium", "advanced": "advanced"}
 
@@ -178,11 +187,49 @@ def accepts_input_document(command: Optional[Sequence[str]]) -> bool:
 
 def unavailable_message(mode: str) -> str:
     """Message clair affiché quand un module du mode n'est pas installé."""
+    if mode == DEEP_MODE:
+        return DEEP_UNAVAILABLE_MESSAGE
     label = mode_label(mode)
     return (
         f"Module « {label} » non installé — ajoutez le module "
         f"« {mode} » (dossier modules/{mode}) pour activer ce mode."
     )
+
+
+def _retarget_mode(
+    command: Sequence[str], mode: str
+) -> Tuple[str, ...]:
+    """Commande worker recalibrée sur un autre ``--mode``.
+
+    Les exécutables packagés et ``python -m worker_main`` portent toujours
+    ``--mode <mode>`` ; la valeur est remplacée sur place (ou ajoutée si un
+    exécutable s'appuie sur son mode par défaut).
+    """
+    parts = [str(part) for part in command]
+    if "--mode" in parts:
+        index = parts.index("--mode")
+        if index + 1 < len(parts):
+            parts[index + 1] = mode
+            return tuple(parts)
+    return tuple(parts) + ("--mode", mode)
+
+
+def resolve_deep_backend(
+    modules_dir: Optional[str] = None,
+) -> Tuple[Optional[Tuple[str, ...]], Optional[str]]:
+    """Résout la commande du mode Approfondi (backend Avancé, Docling).
+
+    Même chaîne de résolution que ``advanced`` dans
+    ``resolve_worker_commands`` (exécutable du manifeste vérifié → venv
+    d'évaluation → commande de développement), avec ``--mode approfondi``.
+    Retourne ``(commande, None)`` si le backend est disponible, sinon
+    ``(None, message d'indisponibilité)``.
+    """
+    commands, unavailable = resolve_worker_commands(modules_dir)
+    advanced = commands.get("advanced")
+    if advanced is None:
+        return None, DEEP_UNAVAILABLE_MESSAGE
+    return _retarget_mode(advanced, DEEP_MODE), None
 
 
 def resolve_worker_commands(

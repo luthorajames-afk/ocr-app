@@ -120,6 +120,9 @@ QPushButton#ModeButton:checked {
     border: 1px solid #e2e6ee;
     color: #1a1d24;
 }
+QPushButton#ModeButton:disabled {
+    color: #a4aab4;
+}
 QLabel#LangLabel {
     color: #68707d;
     font-size: 12px;
@@ -234,6 +237,32 @@ QLabel#ZoomLabel {
 QGraphicsView#PreviewView {
     background: #f2f4f7;
     border: none;
+}
+
+/* --- Panneau Approfondi (filtres + zones) ------------------------------ */
+QWidget#DeepPanel {
+    background: #f7f8fa;
+    border-bottom: 1px solid #dfe3ea;
+}
+QLabel#DeepTitle {
+    font-size: 12.5px;
+    font-weight: 600;
+}
+QLabel#DeepSection {
+    color: #68707d;
+    font-size: 11px;
+    font-weight: 600;
+}
+QLabel#DeepValue {
+    color: #68707d;
+    font-size: 11px;
+}
+QLabel#DeepHint {
+    background: #f7f0e0;
+    color: #946200;
+    font-size: 11.5px;
+    border-radius: 7px;
+    padding: 5px 10px;
 }
 
 /* --- Panneau de résultats --------------------------------------------- */

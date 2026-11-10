@@ -7,15 +7,25 @@ correcte : les bboxes des blocs sont en points PDF (1 pt = 1/72 po) et
 l'image est rendue à ``render_dpi``, d'où ``scale = px_image / largeur_pt``.
 En l'absence d'image (mode démo, anciens dossiers, échec d'écriture), repli
 sur le rendu vectoriel historique (placeholder ou blocs dessinés).
+
+Mode Approfondi : outils souris (``PreviewTool``) — sélection de blocs
+(comportement historique), tracé de zones d'exclusion (drag rect rouge,
+tag « excl », poignée de redimension en bas à droite) et suppression d'une
+zone au clic (outil gomme). Les zones vivent en coordonnées scène ; l'API
+``set_exclusion_zones``/``get_exclusion_zones`` les échange en **points
+PDF** (même convention que les bboxes, cf. ``PAGE_SCALE`` et l'échelle
+dérivée du DPI de ``page_NNN.png``). ``set_page_image`` bascule le fond
+entre l'image originale et l'image filtrée (même page, mêmes dimensions).
 """
 
 from __future__ import annotations
 
 import re
+from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -28,6 +38,7 @@ from PySide6.QtGui import (
     QTransform,
 )
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QGraphicsDropShadowEffect,
     QGraphicsItem,
     QGraphicsPixmapItem,
@@ -55,6 +66,10 @@ PAGE_H = 842.0 * PAGE_SCALE
 # haute résolution) est réduite avant affichage. A4 à 300 DPI = 2 481 px.
 _MAX_PREVIEW_PX = 3500
 
+# Zone d'exclusion : taille minimale d'un tracé (px scène) et de la poignée.
+_ZONE_MIN_SIZE = 3.0
+_ZONE_HANDLE_SIZE = 8.0
+
 # Attribut transient posé par ui/task_runner.py sur chaque page chargée
 # depuis un résultat : dossier de travail contenant page_NNN.png.
 _PAGE_WORK_DIR_ATTR = "work_dir"
@@ -70,6 +85,14 @@ BLOCK_LABELS = {
 }
 
 _NUMERIC_RE = re.compile(r"^[-+0-9  .,%€$]+$")
+
+
+class PreviewTool(Enum):
+    """Outil souris actif sur l'aperçu (mode Approfondi)."""
+
+    SELECT = "select"  # sélection de blocs (comportement historique)
+    ZONE = "zone"      # tracé d'une zone d'exclusion (drag rect)
+    ERASE = "erase"    # suppression d'une zone au clic
 
 
 def _page_image_path(page: Page, image_dir: Optional[str] = None) -> Optional[Path]:
@@ -453,11 +476,158 @@ class BlockOverlayItem(QGraphicsRectItem):
         super().hoverLeaveEvent(event)
 
 
+class ExclusionZoneItem(QGraphicsRectItem):
+    """Zone d'exclusion : rect rouge à tirets, tag « excl », poignée.
+
+    Même vocabulaire visuel que les surcouches de blocs (tag plein au-dessus
+    du rect) mais en ``RED``/``RED_SOFT`` — convention maquette : rouge =
+    exclu. La poignée (bas-droite) redimensionne la zone ; le reste du rect
+    ignore le clic (la vue gère les outils). L'item ne bouge jamais (pos
+    (0, 0)) : sa géométrie vit entièrement dans ``rect()`` (coordonnées
+    scène).
+    """
+
+    def __init__(
+        self,
+        rect: QRectF,
+        index: int,
+        on_geometry_changed: Optional[Callable[[int], None]] = None,
+        bounds: Optional[QRectF] = None,
+    ) -> None:
+        super().__init__(rect)
+        self.index = index
+        self._on_geometry_changed = on_geometry_changed
+        # Bornes de la page en coordonnées scène : la poignée ne peut pas
+        # tirer la zone hors papier (les zones restent clippées à la page).
+        self._bounds = QRectF(bounds) if bounds is not None else None
+        self._resizing = False
+        self._label = "excl"
+        self.setZValue(20)
+        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+
+        font = _font(9, bold=True)
+        metrics = QFontMetricsF(font)
+        self._tag_size = QRectF(
+            0, 0, metrics.horizontalAdvance(self._label) + 10, metrics.height() + 2
+        )
+
+    def _tag_rect(self) -> QRectF:
+        rect = self.rect()
+        height = self._tag_size.height()
+        y = rect.top() - height - 1
+        if y < 0:
+            y = rect.top() + 1
+        return QRectF(rect.left() - 1, y, self._tag_size.width(), height)
+
+    def handle_rect(self) -> QRectF:
+        """Poignée de redimensionnement (coin bas-droite)."""
+        rect = self.rect()
+        size = _ZONE_HANDLE_SIZE
+        return QRectF(
+            rect.right() - size / 2.0,
+            rect.bottom() - size / 2.0,
+            size,
+            size,
+        )
+
+    def boundingRect(self) -> QRectF:  # noqa: N802 - API Qt
+        return (
+            self.rect()
+            .united(self._tag_rect())
+            .united(self.handle_rect())
+            .adjusted(-4, -4, 4, 4)
+        )
+
+    def shape(self) -> QPainterPath:  # noqa: N802 - API Qt
+        path = QPainterPath()
+        path.addRect(self.rect())
+        path.addRect(self._tag_rect())
+        path.addRect(self.handle_rect())
+        return path
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Fond rouge doux (alpha ~60) + bord tirets rouge (maquette Approfondi).
+        soft = QColor(theme.RED)
+        soft.setAlpha(60)
+        painter.setPen(QPen(QColor(theme.RED), 2, Qt.PenStyle.DashLine))
+        painter.setBrush(soft)
+        painter.drawRect(self.rect())
+
+        tag = self._tag_rect()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(theme.RED))
+        painter.drawRoundedRect(tag, 2, 2)
+        painter.setPen(QColor("#ffffff"))
+        painter.setFont(_font(9, bold=True))
+        painter.drawText(
+            tag.adjusted(5, 0, -5, 0),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            self._label,
+        )
+
+        handle = self.handle_rect()
+        painter.setPen(QPen(QColor(theme.RED), 2))
+        painter.setBrush(QColor(theme.PAPER))
+        painter.drawRect(handle)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - API Qt
+        if event.button() == Qt.MouseButton.LeftButton and self.handle_rect().contains(
+            event.pos()
+        ):
+            self._resizing = True
+            event.accept()
+            return
+        event.ignore()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - API Qt
+        if not self._resizing:
+            event.ignore()
+            return
+        rect = self.rect()
+        bottom_right = event.pos()
+        if self._bounds is not None:
+            # Clippé à la page : la zone ne déborde jamais du papier.
+            bottom_right = QPointF(
+                min(bottom_right.x(), self._bounds.right()),
+                min(bottom_right.y(), self._bounds.bottom()),
+            )
+        new_rect = QRectF(
+            rect.topLeft(),
+            QPointF(
+                max(rect.left() + _ZONE_MIN_SIZE, bottom_right.x()),
+                max(rect.top() + _ZONE_MIN_SIZE, bottom_right.y()),
+            ),
+        ).normalized()
+        self.setRect(new_rect)
+        event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - API Qt
+        if not self._resizing:
+            event.ignore()
+            return
+        self._resizing = False
+        if self._on_geometry_changed is not None:
+            self._on_geometry_changed(self.index)
+        event.accept()
+
+
 class PreviewView(QGraphicsView):
-    """Vue graphique de la page avec zoom et surcouches cliquables."""
+    """Vue graphique de la page avec zoom, surcouches cliquables et outils.
+
+    Outils (mode Approfondi, cf. ``PreviewTool``) : ``SELECT`` conserve le
+    comportement historique (clic blocs, Ctrl+molette zoom) ; ``ZONE`` trace
+    une zone d'exclusion au drag ; ``ERASE`` supprime la zone cliquée. Les
+    zones dessinées sont ajoutées immédiatement à la vue et signalées
+    (``zone_drawn``) : le contrôleur les persiste via
+    ``set_exclusion_zones``/``get_exclusion_zones`` (points PDF).
+    """
 
     block_selected = Signal(int)
     zoom_changed = Signal(int)
+    zone_drawn = Signal(QRectF)   # rect scène de la zone tracée
+    zone_deleted = Signal(int)    # index de la zone supprimée
+    zone_changed = Signal(int)    # index de la zone redimensionnée
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -489,10 +659,25 @@ class PreviewView(QGraphicsView):
         self._scene.selectionChanged.connect(self._on_selection_changed)
         self.set_zoom(1.0, emit=False)
 
+        # Outils + zones d'exclusion (mode Approfondi).
+        self._tool = PreviewTool.SELECT
+        self._zone_items: List[ExclusionZoneItem] = []
+        self._zones_points: List[Tuple[float, float, float, float]] = []
+        self._point_scale = PAGE_SCALE
+        self._page_height = PAGE_H
+        self._drawing_item: Optional[QGraphicsRectItem] = None
+        self._draw_origin: Optional[QPointF] = None
+        self._background_item: Optional[QGraphicsPixmapItem] = None
+        self._original_pixmap: Optional[QPixmap] = None
+
     # --- Contenu ----------------------------------------------------------
     def _reset_scene(self, page_h: float = PAGE_H) -> None:
         self._scene.clear()
         self._overlays = []
+        self._zone_items = []
+        self._drawing_item = None
+        self._draw_origin = None
+        self._background_item = None
         self._scene.setSceneRect(
             QRectF(-20, -20, PAGE_W + 40, page_h + 40)
         )
@@ -531,6 +716,11 @@ class PreviewView(QGraphicsView):
             self._scene.addItem(overlay)
             self._overlays.append(overlay)
         self._placeholder = True
+        self._point_scale = PAGE_SCALE
+        self._page_height = PAGE_H
+        self._original_pixmap = None
+        self._zones_points = []
+        self._set_tool_cursor()
 
     def show_page(self, page: Page, image_dir: Optional[str] = None) -> None:
         """Affiche une page : image réelle en fond si disponible, sinon dessin.
@@ -578,9 +768,19 @@ class PreviewView(QGraphicsView):
             )
             background.setZValue(0.5)
             self._scene.addItem(background)
+            self._background_item = background
+            self._original_pixmap = pixmap
         else:
             # Sans fond réel : les blocs sont dessinés (texte) sur la page.
             self._scene.addItem(PageContentItem(page, placeholder=False))
+            self._background_item = None
+            self._original_pixmap = None
+        self._point_scale = point_scale
+        self._page_height = page_h
+        # Les zones sont propres à chaque page : le contrôleur les repose
+        # explicitement (``set_exclusion_zones``) après chaque affichage.
+        self._zones_points = []
+        self._set_tool_cursor()
 
         for index, block in enumerate(page.blocks):
             rect = PageContentItem._block_rect(block, point_scale)
@@ -631,6 +831,211 @@ class PreviewView(QGraphicsView):
             return
         super().wheelEvent(event)
 
+    # --- Outils + zones d'exclusion (mode Approfondi) ---------------------
+    def set_tool(self, tool: PreviewTool) -> None:
+        """Change l'outil souris (SELECT historique, ZONE, ERASE)."""
+        if not isinstance(tool, PreviewTool):
+            raise TypeError(
+                f"outil invalide : PreviewTool attendu, {type(tool).__name__} reçu"
+            )
+        if tool == self._tool:
+            return
+        self._tool = tool
+        self._cancel_drawing()
+        if tool != PreviewTool.SELECT:
+            # Les surcouches de blocs ne doivent pas capter la souris pendant
+            # un tracé ou une gomme : la sélection est vidée.
+            self._scene.clearSelection()
+        self._set_tool_cursor()
+
+    def tool(self) -> PreviewTool:
+        return self._tool
+
+    def _set_tool_cursor(self) -> None:
+        cursor = {
+            PreviewTool.ZONE: Qt.CursorShape.CrossCursor,
+            PreviewTool.ERASE: Qt.CursorShape.PointingHandCursor,
+        }.get(self._tool, Qt.CursorShape.ArrowCursor)
+        self.viewport().setCursor(cursor)
+
+    def _page_scene_rect(self) -> QRectF:
+        return QRectF(0.0, 0.0, PAGE_W, self._page_height)
+
+    def _cancel_drawing(self) -> None:
+        if self._drawing_item is not None:
+            try:
+                self._scene.removeItem(self._drawing_item)
+            except (RuntimeError, ValueError):  # pragma: no cover
+                pass
+            self._drawing_item = None
+        self._draw_origin = None
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - API Qt
+        if event.button() == Qt.MouseButton.LeftButton and (
+            self._tool != PreviewTool.SELECT
+        ):
+            scene_pos = self.mapToScene(event.position().toPoint())
+            if not self._page_scene_rect().contains(scene_pos):
+                event.accept()
+                return
+            if self._tool == PreviewTool.ZONE:
+                self._cancel_drawing()
+                self._draw_origin = scene_pos
+                self._drawing_item = QGraphicsRectItem(
+                    QRectF(scene_pos, scene_pos)
+                )
+                self._drawing_item.setZValue(30)
+                self._drawing_item.setPen(
+                    QPen(QColor(theme.RED), 2, Qt.PenStyle.DashLine)
+                )
+                rubber = QColor(theme.RED)
+                rubber.setAlpha(40)
+                self._drawing_item.setBrush(rubber)
+                self._scene.addItem(self._drawing_item)
+            elif self._tool == PreviewTool.ERASE:
+                self._erase_zone_at(scene_pos)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - API Qt
+        if self._tool == PreviewTool.ZONE and self._drawing_item is not None:
+            pos = self._page_scene_rect().intersected(
+                QRectF(
+                    self._draw_origin,
+                    self.mapToScene(event.position().toPoint()),
+                ).normalized()
+            )
+            self._drawing_item.setRect(pos)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - API Qt
+        if self._tool == PreviewTool.ZONE and self._drawing_item is not None:
+            rect = self._drawing_item.rect()
+            self._cancel_drawing()
+            if rect.width() >= _ZONE_MIN_SIZE and rect.height() >= _ZONE_MIN_SIZE:
+                self._add_zone_item(rect)
+                self.zone_drawn.emit(rect)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def _erase_zone_at(self, scene_pos: QPointF) -> None:
+        """Supprime la zone sous le curseur (outil gomme) et le signale."""
+        for item in self._scene.items(scene_pos):
+            if isinstance(item, ExclusionZoneItem):
+                removed = item.index
+                self._zone_items.remove(item)
+                self._scene.removeItem(item)
+                self._reindex_zone_items()
+                self.zone_deleted.emit(removed)
+                return
+
+    def _reindex_zone_items(self) -> None:
+        for index, item in enumerate(self._zone_items):
+            item.index = index
+
+    def _rebuild_zone_items(self) -> None:
+        for item in list(self._zone_items):
+            try:
+                self._scene.removeItem(item)
+            except (RuntimeError, ValueError):  # pragma: no cover
+                pass
+        self._zone_items = []
+        page_rect = self._page_scene_rect()
+        for point_rect in self._zones_points:
+            scene_rect = QRectF(
+                point_rect[0] * self._point_scale,
+                point_rect[1] * self._point_scale,
+                (point_rect[2] - point_rect[0]) * self._point_scale,
+                (point_rect[3] - point_rect[1]) * self._point_scale,
+            ).intersected(page_rect)
+            # Une zone entièrement hors page (état persisté d'une autre
+            # mise en page) n'a rien à faire à l'écran.
+            if scene_rect.width() <= 0 or scene_rect.height() <= 0:
+                continue
+            self._add_zone_item(scene_rect)
+
+    def _add_zone_item(self, scene_rect: QRectF) -> ExclusionZoneItem:
+        item = ExclusionZoneItem(
+            scene_rect,
+            len(self._zone_items),
+            on_geometry_changed=self._on_zone_geometry_changed,
+            bounds=self._page_scene_rect(),
+        )
+        self._scene.addItem(item)
+        self._zone_items.append(item)
+        return item
+
+    def _on_zone_geometry_changed(self, index: int) -> None:
+        self.zone_changed.emit(index)
+
+    def set_exclusion_zones(
+        self, zones: Optional[Sequence[Sequence[float]]]
+    ) -> None:
+        """Remplace les zones affichées (points PDF, origine haut-gauche)."""
+        cleaned: List[Tuple[float, float, float, float]] = []
+        for zone in zones or ():
+            if not isinstance(zone, (list, tuple)) or len(zone) != 4:
+                continue
+            try:
+                x0, y0, x1, y1 = (float(coord) for coord in zone)
+            except (TypeError, ValueError):
+                continue
+            if x1 <= x0 or y1 <= y0:
+                continue
+            cleaned.append((x0, y0, x1, y1))
+        self._zones_points = cleaned
+        self._rebuild_zone_items()
+
+    def get_exclusion_zones(self) -> List[Tuple[float, float, float, float]]:
+        """Zones affichées, converties en points PDF (bbox du document)."""
+        scale = self._point_scale or PAGE_SCALE
+        zones: List[Tuple[float, float, float, float]] = []
+        for item in self._zone_items:
+            rect = item.rect()
+            x0, y0 = rect.left() / scale, rect.top() / scale
+            x1, y1 = rect.right() / scale, rect.bottom() / scale
+            if x1 <= x0 or y1 <= y0:
+                continue
+            zones.append((x0, y0, x1, y1))
+        return zones
+
+    def zone_count(self) -> int:
+        return len(self._zone_items)
+
+    def set_page_image(self, pixmap: Optional[QPixmap]) -> None:
+        """Bascule le fond de page (Original → ``None``, Filtré → pixmap).
+
+        L'image filtrée partage les dimensions de l'originale (les filtres
+        du prétraitement conservent la taille) : l'échelle et les surcouches
+        restent justes. Sans fond réel (rendu vectoriel), un item pixmap
+        est créé à la volée.
+        """
+        if pixmap is None:
+            pixmap = self._original_pixmap
+        if pixmap is None or pixmap.isNull():
+            if self._background_item is not None:
+                try:
+                    self._scene.removeItem(self._background_item)
+                except (RuntimeError, ValueError):  # pragma: no cover
+                    pass
+                self._background_item = None
+            return
+        if self._background_item is None:
+            self._background_item = QGraphicsPixmapItem(pixmap)
+            self._background_item.setZValue(0.5)
+            self._background_item.setTransformationMode(
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self._scene.addItem(self._background_item)
+        self._background_item.setPixmap(pixmap)
+        if pixmap.width() > 0:
+            self._background_item.setPos(0.0, 0.0)
+            self._background_item.setScale(PAGE_W / float(pixmap.width()))
+
     # --- Sélection --------------------------------------------------------
     def select_block(self, index: int, emit: bool = False) -> bool:
         """Sélectionne la surcouche d'un bloc (lien texte → aperçu).
@@ -676,9 +1081,17 @@ class PreviewView(QGraphicsView):
 
 
 class PreviewPanel(QWidget):
-    """En-tête (fichier, page, zoom) + vue graphique de la page."""
+    """En-tête (fichier, page, outils, zoom) + vue graphique de la page.
+
+    Les outils Approfondi (sélection / zone d'exclusion / gomme) vivent dans
+    l'en-tête et ne sont visibles qu'en mode Approfondi
+    (:meth:`set_deep_tools_visible`).
+    """
 
     block_selected = Signal(int)
+    zone_drawn = Signal(QRectF)
+    zone_deleted = Signal(int)
+    zone_changed = Signal(int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -706,6 +1119,50 @@ class PreviewPanel(QWidget):
         self._info.setObjectName("PreviewInfo")
         head_layout.addWidget(self._info)
         head_layout.addStretch(1)
+
+        # Outils Approfondi (masqués hors mode Approfondi) : sélection,
+        # zone d'exclusion, gomme — QSS SubModeButton, groupe exclusif.
+        self._tool_box = QWidget(head)
+        tool_layout = QHBoxLayout(self._tool_box)
+        tool_layout.setContentsMargins(0, 0, 0, 0)
+        tool_layout.setSpacing(3)
+        self._tool_group = QButtonGroup(self)
+        self._tool_group.setExclusive(True)
+        self._tool_buttons: Dict[PreviewTool, QPushButton] = {}
+        for tool_index, (tool, label, tooltip, icon_name) in enumerate(
+            (
+                (PreviewTool.SELECT, "Sélection", "Sélection de blocs", None),
+                (
+                    PreviewTool.ZONE,
+                    "Zone",
+                    "Tracer une zone d'exclusion (drag) — l'OCR ignorera cette surface",
+                    "circle-dashed",
+                ),
+                (
+                    PreviewTool.ERASE,
+                    "Supprimer",
+                    "Supprimer une zone d'exclusion (clic sur la zone)",
+                    "close",
+                ),
+            )
+        ):
+            button = QPushButton(label, self._tool_box)
+            button.setObjectName("SubModeButton")
+            button.setCheckable(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setToolTip(tooltip)
+            button.setAccessibleName(label)
+            if icon_name:
+                button.setIcon(make_icon(icon_name, theme.MUTED, 13))
+            self._tool_group.addButton(button, tool_index)
+            self._tool_buttons[tool] = button
+            tool_layout.addWidget(button)
+        self._tool_buttons[PreviewTool.SELECT].setChecked(True)
+        self._tool_group.idClicked.connect(
+            lambda _button_id: self._apply_tool_selection()
+        )
+        self._tool_box.setVisible(False)
+        head_layout.addWidget(self._tool_box, 0, Qt.AlignmentFlag.AlignVCenter)
 
         zoom_box = QWidget(head)
         zoom_layout = QHBoxLayout(zoom_box)
@@ -742,10 +1199,50 @@ class PreviewPanel(QWidget):
         self.view = PreviewView(self)
         self.view.zoom_changed.connect(self._on_zoom_changed)
         self.view.block_selected.connect(self.block_selected)
+        self.view.zone_drawn.connect(self.zone_drawn)
+        self.view.zone_deleted.connect(self.zone_deleted)
+        self.view.zone_changed.connect(self.zone_changed)
         layout.addWidget(self.view, 1)
 
     def _on_zoom_changed(self, percent: int) -> None:
         self._zoom_label.setText(f"{percent} %")
+
+    def _apply_tool_selection(self) -> None:
+        for tool, button in self._tool_buttons.items():
+            if button.isChecked():
+                self.view.set_tool(tool)
+                return
+
+    # --- Outils Approfondi -------------------------------------------------
+    def set_tool(self, tool: PreviewTool) -> None:
+        """Active un outil et synchronise l'état visuel des boutons."""
+        for known_tool, button in self._tool_buttons.items():
+            button.setChecked(known_tool is tool)
+        self.view.set_tool(tool)
+
+    def tool(self) -> PreviewTool:
+        return self.view.tool()
+
+    def set_deep_tools_visible(self, visible: bool) -> None:
+        """Affiche les outils souris (mode Approfondi uniquement)."""
+        self._tool_box.setVisible(bool(visible))
+
+    def set_exclusion_zones(
+        self, zones: Optional[Sequence[Sequence[float]]]
+    ) -> None:
+        """Remplace les zones d'exclusion affichées (points PDF)."""
+        self.view.set_exclusion_zones(zones)
+
+    def get_exclusion_zones(self) -> List[Tuple[float, float, float, float]]:
+        """Zones d'exclusion affichées, en points PDF."""
+        return self.view.get_exclusion_zones()
+
+    def zone_count(self) -> int:
+        return self.view.zone_count()
+
+    def set_page_image(self, pixmap: Optional[QPixmap]) -> None:
+        """Bascule le fond : ``None`` = image originale, pixmap = filtrée."""
+        self.view.set_page_image(pixmap)
 
     def zoom_in(self) -> None:
         self.view.zoom_in()
