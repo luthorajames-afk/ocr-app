@@ -48,6 +48,11 @@ Format : [SemVer](https://semver.org/lang/fr/). Types : Ajouté / Modifié / Cor
   pause/reprise/annulation), TaskRunner un document à la fois.
 - T5.1/T5.2 : visionneuse (image de page réelle + repli texte) et onglets
   Rendu / Markdown-HTML / Texte brut ; 5 tests pytest-qt offscreen.
+- T6.1 : `core/io/clipboard.py` + `core/gui/clipboard_qt.py` — presse-papiers
+  riche text/plain + text/html (tableaux) + text/markdown, échappement
+  HTML systématique ; bouton Copier câblé ; 6 tests.
+
+## Backlog v2 terminé (T0.1 → T6.1)
 
 ## [0.1.0-alpha.0] — 2026-11-10
 

@@ -45,4 +45,4 @@ Rôles : [Planificateur] → [Implémenteur] → [Testeur] → [Relecteur Sécur
 
 ## Phase 6 : Exports & Presse-Papiers
 
-- [ ] **T6.1** Presse-papiers HTML riche (tableaux collables dans Word et Excel).
+- [x] **T6.1** Presse-papiers HTML riche (tableaux collables dans Word et Excel).

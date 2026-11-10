@@ -201,6 +201,7 @@ class MainWindow(QMainWindow):
 
         self.bottom.pause_btn.clicked.connect(self._toggle_pause)
         self.bottom.cancel_btn.clicked.connect(self._runner.cancel)
+        self.bottom.copy_btn.clicked.connect(self._copy)
         self.bottom.export_btn.clicked.connect(self._export)
         self.sidebar.list.itemClicked.connect(self._on_task_clicked)
 
@@ -324,6 +325,23 @@ class MainWindow(QMainWindow):
         self.bottom.cancel_btn.setEnabled(running or paused)
         self.bottom.copy_btn.setEnabled(task is not None and task.pages_done > 0)
         self.bottom.export_btn.setEnabled(task is not None and task.pages_done > 0)
+
+    def _copy(self) -> None:
+        """T6.1 — copie riche (HTML tableaux + texte + markdown)."""
+        task = self._current_task
+        if task is None:
+            return
+        from core.gui.clipboard_qt import put_on_clipboard
+        from core.io.clipboard import document_payload
+
+        records: list[dict[str, object]] = []
+        for path in sorted(Path(task.work_dir).glob("page_*.json")):
+            try:
+                records.append(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                continue
+        if records:
+            put_on_clipboard(document_payload(records))
 
     def _export(self) -> None:
         task = self._current_task
