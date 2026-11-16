@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from typing import Any, cast
 
 from PIL import Image
 
@@ -32,7 +33,7 @@ class RapidOcrEngine(OcrEngine):
     name = "rapidocr"
 
     def __init__(self) -> None:
-        self._engine = None
+        self._engine: Any = None
         self._version = ""
 
     @property
@@ -74,9 +75,9 @@ class RapidOcrEngine(OcrEngine):
         assert self._engine is not None
         started = time.perf_counter()
         result = self._engine(image.convert("RGB"))
-        texts = _as_list(getattr(result, "txts", None))
-        boxes = _as_list(getattr(result, "boxes", None))
-        scores = _as_list(getattr(result, "scores", None))
+        texts = cast(list[Any], _as_list(getattr(result, "txts", None)))
+        boxes = cast(list[Any], _as_list(getattr(result, "boxes", None)))
+        scores = cast(list[Any], _as_list(getattr(result, "scores", None)))
 
         blocks: list[OcrBlock] = []
         scale = 72.0 / 300.0  # bboxes en points (page rendue à 300 DPI)

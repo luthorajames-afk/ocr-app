@@ -73,3 +73,42 @@ def test_short_tokens_are_untouched() -> None:
     report = correct_text("le la un")
     assert report.text == "le la un"
     assert report.count == 0
+
+
+def test_finance_ocr_artifacts_are_repaired() -> None:
+    from core.pipeline.lexicon import correct_text
+
+    cases = {
+        "RBFUBLIQUE UNIE DU CAMERCI": "RÉPUBLIQUE UNIE DU CAMEROUN",
+        "le nowore de prolongations": "le nombre de prolongations",
+        "une cendidature valable": "une candidature valable",
+        "la natwe de celle-ci": "la nature de celle-ci",
+        "a tout mement": "a tout moment",
+        "la Forction Publique": "la Fonction Publique",
+        "ARTICLE jer.-": "ARTICLE 1er.-",
+    }
+    for source, expected in cases.items():
+        assert correct_text(source, language="fr").text == expected
+
+
+def test_finance_lexicon_does_not_touch_references() -> None:
+    from core.pipeline.lexicon import correct_text
+
+    report = correct_text("exercice 2022, article 7, 1 431 018 100 FCFA", language="fr")
+    assert "2022" in report.text
+    assert "1 431 018 100" in report.text
+
+
+def test_fuzzy_correction_can_be_disabled_for_noisy_ocr() -> None:
+    from core.pipeline.lexicon import correct_text
+
+    report = correct_text("contact taux reception", language="fr", fuzzy=False)
+    assert report.text == "contact taux reception"
+    assert report.count == 0
+
+
+def test_artifact_fixes_still_apply_without_fuzzy() -> None:
+    from core.pipeline.lexicon import correct_text
+
+    report = correct_text("RBFUBLIQUE UNIE DU CAMERCI", language="fr", fuzzy=False)
+    assert report.text == "RÉPUBLIQUE UNIE DU CAMEROUN"

@@ -146,3 +146,22 @@ def test_docx_merges_wrapped_paragraph_lines(tmp_path: Path) -> None:
     texts = [paragraph.text for paragraph in Document(str(path)).paragraphs]
     assert "Le présent décret fixe les modalités d'application du texte." in texts
     assert "Fin de phrase." in texts and "Nouvelle phrase." in texts
+
+
+def test_running_headers_and_footers_are_not_exported() -> None:
+    pages = [
+        ExportPage(
+            number=index,
+            blocks=[
+                {"kind": "line", "text": "RÉPUBLIQUE DU CAMEROUN", "bbox": [40, 10, 400, 20]},
+                {"kind": "line", "text": f"Corps de la page {index}", "bbox": [40, 100, 500, 112]},
+                {"kind": "line", "text": f"Page {index}", "bbox": [40, 780, 100, 790]},
+            ],
+        )
+        for index in range(1, 5)
+    ]
+    markdown = export_markdown(pages, title="Essai")
+    assert "RÉPUBLIQUE DU CAMEROUN" not in markdown
+    assert "Page 1" not in markdown
+    assert "Corps de la page 1" in markdown
+    assert "Corps de la page 4" in markdown

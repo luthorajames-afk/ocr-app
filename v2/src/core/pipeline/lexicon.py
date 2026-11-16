@@ -31,6 +31,15 @@ DEFAULT_LEXICON: tuple[str, ...] = (
     "officiel", "vigueur", "abrogation", "modification", "budget",
     "dépense", "recette", "crédit", "financier", "fiscal", "trésor",
     "compte", "bilan", "financement", "autorisation", "programme", "tva",
+    "exercice", "exercices", "dotation", "dotations", "autorisation",
+    "engagement", "engagements", "ordonnancement", "liquidation",
+    "recettes", "dépenses", "trésorerie", "fiscalité", "impôt", "impôts",
+    "douane", "douanes", "subvention", "subventions", "emprunt", "emprunts",
+    "dette", "dettes", "garantie", "garanties", "échéancier", "échéance",
+    "privatisation", "restructuration", "assainissement", "régulation",
+    "nomenclature", "comptabilité", "comptable", "ordonnateur",
+    "contrôleur", "perception", "recouvrement", "décaissement",
+    "ordonnance", "ordonnances", "arrêté", "arrêtés", "décret", "décrets",
 )
 
 # Termes juridiques et budgétaires anglais (documents type loi de finances).
@@ -61,6 +70,13 @@ ENGLISH_LEXICON: tuple[str, ...] = (
     "secretariat", "registry", "notary", "lawyer", "attorney", "judge",
     "magistrate", "prosecutor", "clerk", "bailiff", "hearing", "evidence",
     "witness", "pleading", "submission", "memorandum", "judgment",
+    "exercise", "appropriation", "appropriations", "allocation", "endowment",
+    "commitment", "commitments", "disbursement", "settlement", "clearance",
+    "treasury", "taxation", "customs", "duty", "duties", "subsidy",
+    "subsidies", "loan", "loans", "debt", "debts", "guarantee", "guarantees",
+    "repayment", "maturity", "privatization", "restructuring", "sanitation",
+    "regulation", "nomenclature", "accounting", "accountant", "authorizing",
+    "controller", "collection", "recovery", "forecast", "outturn",
 )
 
 BILINGUAL_LEXICON: tuple[str, ...] = DEFAULT_LEXICON + ENGLISH_LEXICON
@@ -70,8 +86,21 @@ ARTIFACT_FIXES_FR: dict[str, str] = {
     "decret": "décret",
     "arrete": "arrêté",
     "republlque": "république",
+    "rbfublique": "république",
     "gouvemement": "gouvernement",
     "paragraphe": "paragraphe",
+    "alinées": "alinéas",
+    "entrafner": "entraîner",
+    "cendidature": "candidature",
+    "nowore": "nombre",
+    "fonctionna": "fonctionnaire",
+    "forction": "fonction",
+    "natwe": "nature",
+    "mement": "moment",
+    "camerci": "cameroun",
+    "determinattsa": "déterminant sa",
+    "rrete": "arrêté",
+    "jer": "1er",
 }
 
 ARTIFACT_FIXES_EN: dict[str, str] = {
@@ -151,6 +180,7 @@ def correct_text(
     *,
     cutoff: float = 0.84,
     language: str = "bilingual",
+    fuzzy: bool = True,
 ) -> CorrectionReport:
     """Corrige les mots proches du lexique, en laissant intactes les références."""
     vocabulary = _lexicon_for(language, lexicon)
@@ -176,7 +206,7 @@ def correct_text(
             candidate = _match_case(token, fixed)
             corrections.append((token, candidate))
             return candidate
-        if len(token) < 4:
+        if len(token) < 4 or not fuzzy:
             return token
         matches = get_close_matches(token, vocabulary, n=1, cutoff=cutoff)
         if not matches:

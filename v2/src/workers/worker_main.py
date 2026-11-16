@@ -45,7 +45,9 @@ def _lexicon_language(languages: list[str] | None) -> str:
     return "bilingual"
 
 
-def _correct_blocks(blocks: list[dict[str, object]], language: str) -> None:
+def _correct_blocks(
+    blocks: list[dict[str, object]], language: str, *, fuzzy: bool = True
+) -> None:
     """Corrige le texte des blocs (références protégées).
 
     Les tableaux sont traités cellule par cellule, et seulement si la cellule
@@ -64,7 +66,7 @@ def _correct_blocks(blocks: list[dict[str, object]], language: str) -> None:
                 for cell in row if isinstance(row, list) else []:
                     value = str(cell)
                     if value.strip() and not any(ch.isdigit() for ch in value) and len(value) >= 4:
-                        value = correct_text(value, language=language).text
+                        value = correct_text(value, language=language, fuzzy=fuzzy).text
                     new_row.append(value)
                 new_grid.append(new_row)
             block["grid"] = new_grid
@@ -73,7 +75,7 @@ def _correct_blocks(blocks: list[dict[str, object]], language: str) -> None:
         text = str(block.get("text", ""))
         if not text.strip():
             continue
-        block["text"] = correct_text(text, language=language).text
+        block["text"] = correct_text(text, language=language, fuzzy=fuzzy).text
 
 
 def _mean_confidence(result: object) -> float:
@@ -281,7 +283,9 @@ class Worker:
                             for block in result.blocks
                         ]
                         if self.lexicon:
-                            _correct_blocks(blocks, self.lexicon_language)
+                            # OCR bruité : artefacts ciblés seulement, pas de
+                            # correction floue (mesurée négative sur scans).
+                            _correct_blocks(blocks, self.lexicon_language, fuzzy=False)
                             text = chr(10).join(
                                 str(block["text"])
                                 for block in blocks

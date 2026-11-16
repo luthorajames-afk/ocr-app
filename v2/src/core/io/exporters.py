@@ -9,7 +9,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,81 @@ def _safe_cell(value: object) -> str:
     if text.startswith(FORMULA_PREFIXES):
         return "'" + text
     return text
+
+
+def _margin_key(block: dict[str, Any], page_height: float) -> tuple[str, str] | None:
+    """Clé d'un bloc de marge (en-tête/pied), chiffres normalisés."""
+    if page_height <= 0:
+        return None
+    text = " ".join(unicodedata.normalize("NFKC", _block_text(block)).split())
+    if not text or len(text) > 100:
+        return None
+    bbox = block.get("bbox") or [0, 0, 0, 0]
+    try:
+        top, bottom = float(bbox[1]), float(bbox[3])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if bottom <= page_height * 0.12:
+        zone = "top"
+    elif top >= page_height * 0.90:
+        zone = "bottom"
+    else:
+        return None
+    return zone, re.sub(r"\d+", "#", text.lower())
+
+
+def _strip_running_margins(pages: list[ExportPage]) -> list[ExportPage]:
+    """Retire les en-têtes/pieds répétés sur la majorité des pages.
+
+    Un bloc de marge (12 % haut / 10 % bas) dont le texte, chiffres
+    normalisés, revient sur au moins la moitié des pages est considéré comme
+    un en-tête/pied courant et n'est pas exporté.
+    """
+    if len(pages) < 4:
+        return pages
+    counts: dict[tuple[str, str], int] = {}
+    per_page: dict[int, set[tuple[str, str]]] = {}
+    for page in pages:
+        height = max(
+            (
+                float((block.get("bbox") or [0, 0, 0, 0])[3])
+                for block in page.blocks
+            ),
+            default=0.0,
+        )
+        keys = {
+            key
+            for block in page.blocks
+            if (key := _margin_key(block, height)) is not None
+        }
+        per_page[page.number] = keys
+        for key in keys:
+            counts[key] = counts.get(key, 0) + 1
+    threshold = max(3, (len(pages) + 1) // 2)
+    repeated = {key for key, count in counts.items() if count >= threshold}
+    if not repeated:
+        return pages
+    return [
+        replace(
+            page,
+            blocks=[
+                block
+                for block in page.blocks
+                if _margin_key(
+                    block,
+                    max(
+                        (
+                            float((item.get("bbox") or [0, 0, 0, 0])[3])
+                            for item in page.blocks
+                        ),
+                        default=0.0,
+                    ),
+                )
+                not in repeated
+            ],
+        )
+        for page in pages
+    ]
 
 
 def _block_text(block: dict[str, Any]) -> str:
@@ -146,7 +222,7 @@ def _merge_paragraphs(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def export_markdown(pages: list[ExportPage], title: str = "Document") -> str:
     """Markdown multi-colonnes : titres, paragraphes et tableaux."""
     parts: list[str] = [f"# {title}", ""]
-    for page in pages:
+    for page in _strip_running_margins(pages):
         parts.extend([f"<!-- page {page.number} -->", ""])
         for block in _merge_paragraphs(page.blocks):
             kind = str(block.get("kind", "line"))
@@ -175,7 +251,7 @@ def export_docx(pages: list[ExportPage], path: str | Path, title: str = "Documen
 
     document = Document()
     document.add_heading(title, level=0)
-    for page_index, page in enumerate(pages):
+    for page_index, page in enumerate(_strip_running_margins(pages)):
         if page_index > 0:
             document.add_page_break()  # type: ignore[no-untyped-call]
         blocks = _merge_paragraphs(page.blocks)
@@ -240,7 +316,7 @@ def export_xlsx(pages: list[ExportPage], path: str | Path, title: str = "Documen
     sheet = workbook.active
     sheet.title = title[:31] or "Document"
     row_index = 1
-    for page in pages:
+    for page in _strip_running_margins(pages):
         sheet.cell(row=row_index, column=1, value=f"Page {page.number}")
         row_index += 1
         for block in page.blocks:
