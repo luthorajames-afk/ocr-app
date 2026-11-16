@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass, replace
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -56,16 +57,16 @@ def _margin_key(block: dict[str, Any], page_height: float) -> tuple[str, str] | 
 
 
 def _strip_running_margins(pages: list[ExportPage]) -> list[ExportPage]:
-    """Retire les en-têtes/pieds répétés sur la majorité des pages.
+    """Retire les en-têtes/pieds répétés, même fragmentés.
 
-    Un bloc de marge (12 % haut / 10 % bas) dont le texte, chiffres
-    normalisés, revient sur au moins la moitié des pages est considéré comme
-    un en-tête/pied courant et n'est pas exporté.
+    Les blocs de marge (12 % haut / 10 % bas) sont regroupés par similarité
+    (0,72) et par zone ; un groupe présent sur assez de pages est considéré
+    comme un en-tête/pied courant. Les tampons irréguliers (fragments
+    différents selon les pages) sont ainsi attrapés, sans toucher au corps.
     """
     if len(pages) < 4:
         return pages
-    counts: dict[tuple[str, str], int] = {}
-    per_page: dict[int, set[tuple[str, str]]] = {}
+    entries: list[tuple[int, int, str, str]] = []
     for page in pages:
         height = max(
             (
@@ -74,35 +75,46 @@ def _strip_running_margins(pages: list[ExportPage]) -> list[ExportPage]:
             ),
             default=0.0,
         )
-        keys = {
-            key
-            for block in page.blocks
-            if (key := _margin_key(block, height)) is not None
-        }
-        per_page[page.number] = keys
-        for key in keys:
-            counts[key] = counts.get(key, 0) + 1
-    threshold = max(3, (len(pages) + 1) // 2)
-    repeated = {key for key, count in counts.items() if count >= threshold}
-    if not repeated:
+        for index, block in enumerate(page.blocks):
+            if str(block.get("kind", "line")) == "table":
+                continue
+            key = _margin_key(block, height)
+            if key is not None:
+                entries.append((page.number, index, key[0], key[1]))
+    if not entries:
+        return pages
+    entries.sort(key=lambda entry: -len(entry[3]))
+    clusters: list[tuple[str, str, set[int], list[tuple[int, int]]]] = []
+    for page_number, index, zone, text in entries:
+        for cluster_zone, representative, cluster_pages, members in clusters:
+            if cluster_zone != zone:
+                continue
+            if SequenceMatcher(None, text, representative).ratio() >= 0.72:
+                cluster_pages.add(page_number)
+                members.append((page_number, index))
+                break
+        else:
+            clusters.append((zone, text, {page_number}, [(page_number, index)]))
+    top_threshold = max(3, (len(pages) + 1) // 2)
+    bottom_threshold = (
+        max(3, int(len(pages) * 0.1)) if len(pages) >= 10 else top_threshold
+    )
+    skip: dict[int, set[int]] = {}
+    for zone, _text, cluster_pages, members in clusters:
+        threshold = bottom_threshold if zone == "bottom" else top_threshold
+        if len(cluster_pages) < threshold:
+            continue
+        for page_number, index in members:
+            skip.setdefault(page_number, set()).add(index)
+    if not skip:
         return pages
     return [
         replace(
             page,
             blocks=[
                 block
-                for block in page.blocks
-                if _margin_key(
-                    block,
-                    max(
-                        (
-                            float((item.get("bbox") or [0, 0, 0, 0])[3])
-                            for item in page.blocks
-                        ),
-                        default=0.0,
-                    ),
-                )
-                not in repeated
+                for index, block in enumerate(page.blocks)
+                if index not in skip.get(page.number, set())
             ],
         )
         for page in pages
