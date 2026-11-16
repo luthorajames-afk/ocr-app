@@ -155,15 +155,23 @@ def role_breaks_paragraph(role: str) -> bool:
 
 
 class OutlineEntry:
-    """Entrée du plan du document (rôle, texte court, page, index de bloc)."""
+    """Entrée du plan du document (rôle, texte court, page, index, boîte)."""
 
-    __slots__ = ("block_index", "page", "role", "text")
+    __slots__ = ("bbox", "block_index", "page", "role", "text")
 
-    def __init__(self, role: str, text: str, page: int, block_index: int) -> None:
+    def __init__(
+        self,
+        role: str,
+        text: str,
+        page: int,
+        block_index: int,
+        bbox: tuple[float, float, float, float] | None = None,
+    ) -> None:
         self.role = role
         self.text = text
         self.page = page
         self.block_index = block_index
+        self.bbox = bbox
 
 
 _OUTLINE_ROLES = frozenset(
@@ -186,5 +194,6 @@ def build_outline(
             text = _clean(block.text)
             if not text:
                 continue
-            entries.append(OutlineEntry(role, text[:120], page_number, index))
+            left, top, right, bottom = (float(value) for value in block.bbox)
+            entries.append(OutlineEntry(role, text[:120], page_number, index, (left, top, right, bottom)))
     return entries

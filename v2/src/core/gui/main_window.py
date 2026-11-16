@@ -11,10 +11,11 @@ from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QPixmap
+from PySide6.QtGui import QCloseEvent, QColor, QPen, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
     QHBoxLayout,
@@ -35,6 +36,7 @@ from PySide6.QtWidgets import (
 from core.gui import theme
 from core.gui.comparison_window import ComparisonWindow
 from core.gui.correction_dialog import CorrectionDialog
+from core.gui.outline_panel import OutlinePanel
 from core.gui.task_runner import Task, TaskRunner, TaskStatus
 from core.gui.worker_client import WorkerClient
 from core.metadata import APP_VERSION
@@ -219,6 +221,7 @@ class PreviewPanel(QWidget):
         self.compare_btn.toggled.connect(self.compare.setVisible)
         self._page = 1
         self._total = 1
+        self._flash_item: QGraphicsRectItem | None = None
         self._html = "<p style='color:#68707d'>Résultat en attente…</p>"
         self._detached: ComparisonWindow | None = None
         self._pinning = False
@@ -239,12 +242,35 @@ class PreviewPanel(QWidget):
 
     def show_placeholder(self) -> None:
         self.scene.clear()
+        self._flash_item = None
         self.scene.addRect(0, 0, 430, 608, brush=Qt.GlobalColor.white)
         self.compare.setHtml("<p style='color:#68707d'>Résultat en attente…</p>")
         self.info.setText("aperçu en attente")
 
+    def flash_block(
+        self, bbox: tuple[float, float, float, float], dpi: int = 300
+    ) -> None:
+        """Surligne un bloc (points, haut-gauche) sur la page affichée ~2,5 s."""
+        scale = dpi / 72.0
+        x0, y0, x1, y1 = bbox
+        pen = QPen(QColor(125, 152, 255), max(2.0, scale * 0.9))
+        brush = QColor(125, 152, 255, 60)
+        item = QGraphicsRectItem(x0 * scale, y0 * scale, (x1 - x0) * scale, (y1 - y0) * scale)
+        item.setPen(pen)
+        item.setBrush(brush)
+        self.scene.addItem(item)
+        self._flash_item = item
+        QTimer.singleShot(2500, self._clear_flash)
+
+    def _clear_flash(self) -> None:
+        item = getattr(self, "_flash_item", None)
+        if item is not None:
+            self.scene.removeItem(item)
+        self._flash_item = None
+
     def show_page(self, task: Task, page_number: int) -> None:
         self.scene.clear()
+        self._flash_item = None
         self._page = page_number
         self._total = max(1, task.total_pages or 1)
         self.page_label.setText(f"page {self._page} / {self._total}")
@@ -526,13 +552,18 @@ class MainWindow(QMainWindow):
         self.center_split.setStretchFactor(1, 2)
         self._results_sizes = [520, 260]
         center_layout.addWidget(self.center_split)
+        self.outline = OutlinePanel(self)
+        self.outline.setVisible(False)
+        self.outline.jump_requested.connect(self._on_outline_jump)
         self.main_split = QSplitter(Qt.Orientation.Horizontal, self)
         self.main_split.addWidget(self.sidebar)
+        self.main_split.addWidget(self.outline)
         self.main_split.addWidget(center)
         self.main_split.setStretchFactor(0, 0)
-        self.main_split.setStretchFactor(1, 1)
-        self.main_split.setSizes([300, 980])
-        self._sidebar_sizes = [300, 980]
+        self.main_split.setStretchFactor(1, 0)
+        self.main_split.setStretchFactor(2, 1)
+        self.main_split.setSizes([300, 300, 680])
+        self._sidebar_sizes = [300, 300, 680]
         self.setCentralWidget(self.main_split)
 
         self.bottom = BottomBar(self)
@@ -596,9 +627,15 @@ class MainWindow(QMainWindow):
         scan.setToolTip("Aucun scanner détecté (WIA/TWAIN/eSCL)")
         info = QLabel(f"Tesseract · DPI 300 · v{APP_VERSION}", bar)
         info.setObjectName("Muted")
+        self.plan_btn = QPushButton("☰ Plan", bar)
+        self.plan_btn.setToolTip("Plan du document : articles, titres, sections")
+        self.plan_btn.setCheckable(True)
+        self.plan_btn.setChecked(False)
+        self.plan_btn.clicked.connect(self._toggle_plan)
         layout.addWidget(self.sidebar_btn)
         layout.addWidget(group)
         layout.addWidget(add)
+        layout.addWidget(self.plan_btn)
         layout.addWidget(self.results_btn)
         layout.addWidget(self.correct_btn)
         self.calibrate_btn = calibrate
@@ -679,6 +716,8 @@ class MainWindow(QMainWindow):
             self._last_page = task.pages_done or task.current_page
             if task.status == TaskStatus.RUNNING and task.stage:
                 self.preview.info.setText(f"page {task.current_page} / {total or '?'}")
+            if task.status == TaskStatus.DONE and self.outline.isVisible():
+                self._refresh_outline()
         self._update_buttons()
 
     def _on_page_ready(self, task_id: str, page: int) -> None:
@@ -690,6 +729,8 @@ class MainWindow(QMainWindow):
     def _show_page(self, task: Task, page: int) -> None:
         self.preview.show_page(task, page)
         self._active_page = page
+        if self.outline.isVisible():
+            self.outline.set_current_page(page)
         data = Path(task.work_dir) / f"page_{page:03d}.json"
         if data.is_file():
             try:
@@ -757,6 +798,8 @@ class MainWindow(QMainWindow):
             self._current_task = task
             if task.pages_done:
                 self._on_page_ready(task.id, task.pages_done)
+            if self.outline.isVisible():
+                self._refresh_outline()
 
     # ------------------------------------------------------------ actions
     def _toggle_pause(self) -> None:
@@ -807,6 +850,49 @@ class MainWindow(QMainWindow):
             self.sidebar_btn.setText("◀")
             self.main_split.setSizes(self._sidebar_sizes)
             self.preview.fit_page()
+
+    def _toggle_plan(self) -> None:
+        """Ouvre/ferme le panneau plan du document (bouton ☰ Plan)."""
+        if self.outline.isVisible():
+            self._sidebar_sizes = self.main_split.sizes()
+            self.outline.setVisible(False)
+            self.main_split.setSizes(self._sidebar_sizes)
+        else:
+            self.outline.setVisible(True)
+            if self._sidebar_sizes[-1] >= self._sidebar_sizes[0]:
+                total = sum(self._sidebar_sizes)
+                self._sidebar_sizes = [300, 300, max(400, total - 600)]
+            self.main_split.setSizes(self._sidebar_sizes)
+            self._refresh_outline()
+        self.preview.fit_page()
+
+    def _refresh_outline(self) -> None:
+        """Recharge le plan du document courant (tâche sélectionnée)."""
+        task = self._current_task
+        if task is None:
+            self.outline.clear_outline()
+            return
+        count = self.outline.load_outline(Path(task.work_dir))
+        self.outline.set_current_page(self._active_page)
+        if count == 0:
+            self.bottom.label.setText(
+                "Plan : aucune entrée (attendez la fin du traitement)"
+            )
+
+    def _on_outline_jump(
+        self,
+        page: int,
+        _block_index: int,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+    ) -> None:
+        """Clic dans le plan : saut à la page + surlignage du bloc."""
+        self._on_page_requested(page)
+        task = self._current_task
+        if task is not None:
+            self.preview.flash_block((x0, y0, x1, y1), dpi=task.dpi)
 
     def _toggle_results(self) -> None:
         """Replie/déplie le bloc du bas (Rendu / Markdown-HTML / Texte brut)."""
