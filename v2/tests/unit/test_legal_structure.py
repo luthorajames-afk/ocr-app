@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from core.pipeline.interfaces import OcrBlock
 from core.pipeline.legal_structure import (
     ROLE_ALINEA,
     ROLE_ANNEXE,
@@ -19,7 +20,6 @@ from core.pipeline.legal_structure import (
     role_breaks_paragraph,
     role_heading_level,
 )
-from core.pipeline.interfaces import OcrBlock
 
 
 def block(text: str, kind: str = "line") -> OcrBlock:

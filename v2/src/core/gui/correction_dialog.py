@@ -25,7 +25,13 @@ LOW_CONFIDENCE = 0.60
 
 
 class CorrectionDialog(QDialog):
-    """Liste les blocs de la page, permet de les corriger et de relancer l'OCR."""
+    """Liste les blocs de la page, permet de les corriger et de relancer l'OCR.
+
+    Le tableau est trié par confiance croissante (blocs faibles en premier),
+    mais ``save_corrections`` réécrit ``page_NNN.json`` dans l'ordre d'origine
+    des blocs (ordre de lecture produit par le pipeline) : le tri d'affichage
+    ne doit jamais se propager au fichier.
+    """
 
     reprocess_requested = Signal(bool, bool)  # second_pass, best_variant
     saved = Signal()
@@ -55,14 +61,17 @@ class CorrectionDialog(QDialog):
             value = block.get("confidence", 0.0)
             return float(value) if isinstance(value, (int, float, str)) else 0.0
 
-        self._blocks.sort(key=confidence_of)
+        # Ordre d'affichage uniquement : blocs faibles en premier. Les mêmes
+        # dict sont partagés avec ``self._blocks`` (ordre d'origine conservé),
+        # donc l'édition d'une ligne met à jour le bloc correspondant.
+        self._rows: list[dict[str, object]] = sorted(self._blocks, key=confidence_of)
 
-        self.table = QTableWidget(len(self._blocks), 3, self)
+        self.table = QTableWidget(len(self._rows), 3, self)
         self.table.setHorizontalHeaderLabels(["Confiance", "Type", "Texte (éditable)"])
         self.table.setColumnWidth(0, 90)
         self.table.setColumnWidth(1, 70)
         self.table.horizontalHeader().setStretchLastSection(True)
-        for row, block in enumerate(self._blocks):
+        for row, block in enumerate(self._rows):
             confidence = confidence_of(block)
             confidence_item = QTableWidgetItem(f"{confidence:.0%}")
             if confidence < LOW_CONFIDENCE:
@@ -125,8 +134,12 @@ class CorrectionDialog(QDialog):
         return data if isinstance(data, dict) else {}
 
     def save_corrections(self) -> None:
-        """Écrit les textes corrigés dans page_NNN.json (atomique)."""
-        for row, block in enumerate(self._blocks):
+        """Écrit les textes corrigés dans page_NNN.json (atomique).
+
+        Les blocs sont réécrits dans leur ordre d'origine (ordre de lecture du
+        pipeline), pas dans l'ordre d'affichage du tableau.
+        """
+        for row, block in enumerate(self._rows):
             item = self.table.item(row, 2)
             if item is not None:
                 block["text"] = item.text()
