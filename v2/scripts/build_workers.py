@@ -77,7 +77,23 @@ def build_command(target: str, venv: Path | None = None) -> list[str]:
         "--paths",
         str(PROJECT / "src"),
     ]
+    if target != "advanced":
+        # Les moteurs lourds sont importés paresseusement par worker_main ;
+        # sans exclusion, PyInstaller les embarque dans TOUTES les cibles.
+        for module in (
+            "docling",
+            "docling_core",
+            "docling_ibm_models",
+            "torch",
+            "torchvision",
+            "transformers",
+            "scipy",
+            "sklearn",
+        ):
+            command += ["--exclude-module", module]
     if target == "simple":
+        for module in ("rapidocr", "onnxruntime", "cv2"):
+            command += ["--exclude-module", module]
         tessdata = PROJECT / "models" / "tessdata"
         if tessdata.is_dir():
             command += ["--add-data", f"{tessdata};models/tessdata"]
