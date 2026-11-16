@@ -354,7 +354,10 @@ def _native_blocks(page: pdfium.PdfPage, page_height: float) -> list[OcrBlock]:
     median_height = heights[len(heights) // 2] if heights else 10.0
 
     blocks = _native_tables_and_columns(rects, page_height, median_height)
-    return _apply_styles(blocks, textpage)
+    blocks = _apply_styles(blocks, textpage)
+    from core.pipeline.legal_structure import assign_roles
+
+    return assign_roles(blocks)
 
 
 def _cluster_columns(

@@ -39,6 +39,9 @@ class OcrBlock:
     font_name: str = ""
     bold: bool = False
     italic: bool = False
+    # Rôle juridique (décret/arrêté/loi/décision) : article, titre, visa,
+    # considerant, dispositif, signature, annexe, alinea, section, meta, "".
+    role: str = ""
 
 
 @dataclass(frozen=True, slots=True)

@@ -163,6 +163,11 @@ def _can_join(previous: dict[str, Any], following: dict[str, Any], page_width: f
     next_kind = str(following.get("kind", "line"))
     if prev_kind != next_kind or prev_kind not in ("line", "title"):
         return False
+    # Un article, alinéa, titre ou annexe ouvre toujours un paragraphe neuf.
+    from core.pipeline.legal_structure import role_breaks_paragraph
+
+    if role_breaks_paragraph(str(following.get("role", ""))):
+        return False
     prev_text = _block_text(previous).strip()
     next_text = _block_text(following).strip()
     if not prev_text or not next_text:
@@ -236,10 +241,15 @@ def export_markdown(pages: list[ExportPage], title: str = "Document") -> str:
     parts: list[str] = [f"# {title}", ""]
     for page in _strip_running_margins(pages):
         parts.extend([f"<!-- page {page.number} -->", ""])
+        from core.pipeline.legal_structure import role_heading_level
+
         for block in _merge_paragraphs(page.blocks):
             kind = str(block.get("kind", "line"))
             text = _block_text(block)
-            if kind == "title":
+            level = role_heading_level(str(block.get("role", "")))
+            if level > 0:
+                parts.extend([f"{'#' * (1 + level)} {text}", ""])
+            elif kind == "title":
                 parts.extend([f"### {text}", ""])
             elif kind == "table":
                 grid = block.get("grid") or []
@@ -261,6 +271,8 @@ def export_docx(pages: list[ExportPage], path: str | Path, title: str = "Documen
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Pt, RGBColor
 
+    from core.pipeline.legal_structure import role_heading_level
+
     document = Document()
     document.add_heading(title, level=0)
     for page_index, page in enumerate(_strip_running_margins(pages)):
@@ -279,7 +291,10 @@ def export_docx(pages: list[ExportPage], path: str | Path, title: str = "Documen
             kind = str(block.get("kind", "line"))
             text = _block_text(block)
             size, name, bold, italic = _block_style(block)
-            if kind == "title":
+            role_level = role_heading_level(str(block.get("role", "")))
+            if role_level > 0:
+                paragraph = document.add_heading(text, level=role_level)
+            elif kind == "title":
                 paragraph = document.add_heading(text, level=2)
             elif kind == "table":
                 grid = block.get("grid") or []
@@ -298,9 +313,10 @@ def export_docx(pages: list[ExportPage], path: str | Path, title: str = "Documen
                 x1 = float(bbox[2])
             except (TypeError, ValueError, IndexError):
                 x0, x1 = page_left, page_right
-            if kind == "title" and abs((x0 + x1) / 2.0 - page_center) < 20.0:
+            is_heading = kind == "title" or role_level > 0
+            if is_heading and abs((x0 + x1) / 2.0 - page_center) < 20.0:
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            elif kind != "title":
+            elif not is_heading:
                 indent = x0 - page_left
                 if 8.0 < indent < 220.0:
                     paragraph.paragraph_format.left_indent = Pt(indent)
@@ -311,7 +327,7 @@ def export_docx(pages: list[ExportPage], path: str | Path, title: str = "Documen
                     run.font.name = name
                 run.bold = bold
                 run.italic = italic
-                if kind == "title":
+                if kind == "title" or role_level > 0:
                     run.font.color.rgb = RGBColor(0, 0, 0)
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

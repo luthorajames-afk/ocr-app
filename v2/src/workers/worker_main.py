@@ -54,6 +54,7 @@ def _correct_blocks(
     ne contient aucun chiffre (codes, montants et références intacts).
     """
     from core.pipeline.lexicon import correct_text
+    from core.pipeline.typewriter import fix_typewriter
 
     for block in blocks:
         if block.get("kind") == "table":
@@ -67,6 +68,9 @@ def _correct_blocks(
                     value = str(cell)
                     if value.strip() and not any(ch.isdigit() for ch in value) and len(value) >= 4:
                         value = correct_text(value, language=language, fuzzy=fuzzy).text
+                    # Mots mixtes lettre/chiffre validés par le vocabulaire
+                    # (« arr4t4 », « rnodifi4e ») ; références protégées.
+                    value, _ = fix_typewriter(value)
                     new_row.append(value)
                 new_grid.append(new_row)
             block["grid"] = new_grid
@@ -75,7 +79,9 @@ def _correct_blocks(
         text = str(block.get("text", ""))
         if not text.strip():
             continue
-        block["text"] = correct_text(text, language=language, fuzzy=fuzzy).text
+        text = correct_text(text, language=language, fuzzy=fuzzy).text
+        text, _ = fix_typewriter(text)
+        block["text"] = text
 
 
 def _mean_confidence(result: object) -> float:
@@ -218,6 +224,7 @@ class Worker:
                                 "font_name": block.font_name,
                                 "bold": block.bold,
                                 "italic": block.italic,
+                                "role": block.role,
                             }
                             for block in page.blocks
                         ]
@@ -270,9 +277,13 @@ class Worker:
                         from core.pipeline.layout import order_blocks_in_columns
 
                         ordered = order_blocks_in_columns(result.blocks)
+                        from core.pipeline.legal_structure import assign_roles
+                        from core.pipeline.stamps import filter_stamp_blocks
+
+                        ordered = filter_stamp_blocks(ordered, page.image, dpi=self.dpi)
                         result = dc_replace(
                             result,
-                            blocks=tuple(ordered),
+                            blocks=tuple(assign_roles(ordered)),
                             text="\n".join(block.text for block in ordered if block.text.strip()),
                         )
                         text = result.text
@@ -288,6 +299,7 @@ class Worker:
                                 "font_name": block.font_name,
                                 "bold": block.bold,
                                 "italic": block.italic,
+                                "role": block.role,
                             }
                             for block in result.blocks
                         ]
