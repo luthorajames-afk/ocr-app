@@ -107,7 +107,7 @@ class WorkerClient(QObject):
         languages: str = "fra+eng",
         page: int | None = None,
         second_pass: bool = False,
-        best_variant: bool = False,
+        best_variant: bool = True,
         lexicon: bool = True,
     ) -> bool:
         if self._running:

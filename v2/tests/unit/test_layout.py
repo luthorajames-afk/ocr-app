@@ -55,3 +55,25 @@ def test_empty_geometry_blocks_stay_last() -> None:
     ]
     ordered = order_blocks_in_columns(blocks)
     assert [item.text for item in ordered] == ["texte", "sans position"]
+
+
+def test_invoice_header_is_not_two_columns() -> None:
+    blocks = [
+        block("SARL Dupont", 45, 20, 260, 32),
+        block("FACTURE", 600, 20, 700, 34),
+        block("adresse", 45, 36, 250, 48),
+        block("N° 2026-003", 600, 40, 720, 52),
+        block("Corps de la facture sur toute la largeur", 45, 200, 760, 212),
+        block("Total TTC", 600, 240, 720, 252),
+        block("Pied de page", 45, 780, 760, 792),
+    ]
+    ordered = order_blocks_in_columns(blocks)
+    assert [item.text for item in ordered] == [
+        "SARL Dupont",
+        "FACTURE",
+        "adresse",
+        "N° 2026-003",
+        "Corps de la facture sur toute la largeur",
+        "Total TTC",
+        "Pied de page",
+    ]

@@ -19,11 +19,16 @@ def _merge_intervals(intervals: list[tuple[float, float]]) -> list[tuple[float, 
     return merged
 
 
-def _column_ranges(blocks: list[OcrBlock], page_width: float) -> list[tuple[float, float]]:
+def _column_ranges(
+    blocks: list[OcrBlock], page_width: float, page_height: float
+) -> list[tuple[float, float]]:
     """Colonnes = segments séparés par une gouttière libre de tout bloc.
 
     Les blocs pleine largeur (en-têtes, titres, pieds de page) sont exclus :
-    ce sont eux qui relient visuellement les colonnes.
+    ce sont eux qui relient visuellement les colonnes. Deux colonnes ne sont
+    retenues que si elles se recouvrent verticalement de façon significative :
+    un en-tête de facture (société à gauche, « FACTURE » à droite) n'est pas
+    un texte en deux colonnes.
     """
     if page_width <= 0:
         return []
@@ -43,7 +48,29 @@ def _column_ranges(blocks: list[OcrBlock], page_width: float) -> list[tuple[floa
     ]
     if any(gutter < GUTTER_MIN_WIDTH for gutter in gutters):
         return []
-    return merged
+    spans: list[list[float]] = []
+    for left, right in merged:
+        members = [
+            block
+            for block in narrow
+            if min(block.bbox[2], right) - max(block.bbox[0], left) > 0
+        ]
+        if members:
+            spans.append(
+                [
+                    min(block.bbox[1] for block in members),
+                    max(block.bbox[3] for block in members),
+                ]
+            )
+    overlap_floor = page_height * 0.2
+    for first in range(len(spans)):
+        for second in range(first + 1, len(spans)):
+            overlap = min(spans[first][1], spans[second][1]) - max(
+                spans[first][0], spans[second][0]
+            )
+            if overlap >= overlap_floor:
+                return merged
+    return []
 
 
 def _column_of(block: OcrBlock, columns: list[tuple[float, float]]) -> int:
@@ -78,7 +105,10 @@ def order_blocks_in_columns(
         if (block.bbox[2] - block.bbox[0]) >= page_width * WIDE_BLOCK_RATIO
     ]
     narrow = [block for block in positioned if block not in wide]
-    columns = _column_ranges(narrow, page_width) or [(-1.0, float("inf"))]
+    page_height = max(block.bbox[3] for block in positioned)
+    columns = _column_ranges(narrow, page_width, page_height)
+    if not columns:
+        return sorted(positioned, key=lambda block: (block.bbox[1], block.bbox[0])) + unpositioned
 
     def sort_key(block: OcrBlock) -> tuple[int, float, float]:
         return (_column_of(block, columns), block.bbox[1], block.bbox[0])

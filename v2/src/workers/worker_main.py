@@ -241,12 +241,21 @@ class Worker:
                         self._debug("ocr start")
                         result = engine.process(prepared.image, languages=self.languages)
                         self._debug("ocr done")
-                        if self.best_variant:
-                            # Compare brut vs prétraité : garde la meilleure confiance.
-                            raw_result = engine.process(page.image, languages=self.languages)
+                        if self.best_variant and any(
+                            step.startswith("deskew") for step in prepared.applied
+                        ):
+                            # Page redressée : comparer brut vs redressé et garder
+                            # la meilleure confiance ; à égalité, le brut (moins
+                            # de risque de fausse inclinaison, ex. scan_009).
+                            raw_result = engine.process(
+                                page.image, languages=self.languages
+                            )
                             prepared_conf = _mean_confidence(result)
                             raw_conf = _mean_confidence(raw_result)
-                            if raw_conf > prepared_conf + 0.02:
+                            # Le brut gagne sauf si le redressement apporte un
+                            # gain net (> 3 pts) : une fausse inclinaison peut
+                            # dégrader l'OCR malgré une confiance équivalente.
+                            if raw_conf >= prepared_conf - 0.03:
                                 result = raw_result
                         if self.second_pass and hasattr(engine, "process_region"):
                             from dataclasses import replace as dc_replace
