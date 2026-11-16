@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,13 +37,118 @@ def _block_text(block: dict[str, Any]) -> str:
     return str(block.get("text", ""))
 
 
+def _block_style(block: dict[str, Any]) -> tuple[float, str, bool, bool]:
+    try:
+        size = float(block.get("font_size") or 0.0)
+    except (TypeError, ValueError):
+        size = 0.0
+    return (
+        size,
+        str(block.get("font_name") or ""),
+        bool(block.get("bold")),
+        bool(block.get("italic")),
+    )
+
+
+def _markdown_styled(text: str, block: dict[str, Any]) -> str:
+    _size, _name, bold, italic = _block_style(block)
+    if bold and italic:
+        return f"***{text}***"
+    if bold:
+        return f"**{text}**"
+    if italic:
+        return f"*{text}*"
+    return text
+
+
+_ENUMERATION = re.compile(r"^(?:\d+[°.)]|[a-zA-Z]\)|[-–—•])")
+_CONTINUATION_WORDS = {
+    "à", "au", "aux", "ce", "ces", "cette", "d", "dans", "de", "des", "du",
+    "en", "et", "l", "la", "le", "les", "leur", "leurs", "ou", "par", "pour",
+    "sa", "ses", "son", "sur", "un", "une",
+}
+
+
+def _can_join(previous: dict[str, Any], following: dict[str, Any], page_width: float) -> bool:
+    """Deux lignes consécutives forment-elles un même paragraphe ?"""
+    prev_kind = str(previous.get("kind", "line"))
+    next_kind = str(following.get("kind", "line"))
+    if prev_kind != next_kind or prev_kind not in ("line", "title"):
+        return False
+    prev_text = _block_text(previous).strip()
+    next_text = _block_text(following).strip()
+    if not prev_text or not next_text:
+        return False
+    if prev_kind == "title":
+        try:
+            prev_bbox = previous.get("bbox") or [0, 0, 0, 0]
+            next_bbox = following.get("bbox") or [0, 0, 0, 0]
+            prev_height = max(1.0, float(prev_bbox[3]) - float(prev_bbox[1]))
+            gap = float(next_bbox[1]) - float(prev_bbox[3])
+        except (TypeError, ValueError, IndexError):
+            return False
+        return gap <= prev_height * 2.5
+    if prev_text.endswith((".", "!", "?", ":", ";", "…")) and not _ENUMERATION.match(prev_text):
+        return False
+    if next_text[0] in "-•*–—":
+        return False
+    if next_text[0].isupper():
+        last_word = prev_text.split()[-1].strip(".,;:—–-").lower() if prev_text.split() else ""
+        if last_word not in _CONTINUATION_WORDS:
+            return False
+    try:
+        prev_bbox = previous.get("bbox") or [0, 0, 0, 0]
+        next_bbox = following.get("bbox") or [0, 0, 0, 0]
+        prev_right = float(prev_bbox[2])
+        prev_height = max(1.0, float(prev_bbox[3]) - float(prev_bbox[1]))
+        gap = float(next_bbox[1]) - float(prev_bbox[3])
+    except (TypeError, ValueError, IndexError):
+        return False
+    if page_width > 0 and prev_right < page_width * 0.8:
+        return False
+    return gap <= prev_height * 1.8
+
+
+def _merge_paragraphs(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Fusionne les lignes de continuation d'un paragraphe (export lisible)."""
+    if not blocks:
+        return []
+    try:
+        page_width = max(float((block.get("bbox") or [0, 0, 0, 0])[2]) for block in blocks)
+    except (TypeError, ValueError, IndexError):
+        page_width = 0.0
+    merged: list[dict[str, Any]] = []
+    for block in blocks:
+        if merged and _can_join(merged[-1], block, page_width):
+            previous = merged[-1]
+            left = _block_text(previous).rstrip()
+            right = _block_text(block).strip()
+            if left.endswith("-") and right[:1].islower():
+                text = left[:-1] + right
+            else:
+                text = f"{left} {right}"
+            combined = dict(previous)
+            combined["text"] = text
+            prev_bbox = previous.get("bbox") or [0, 0, 0, 0]
+            next_bbox = block.get("bbox") or [0, 0, 0, 0]
+            combined["bbox"] = [
+                min(float(prev_bbox[0]), float(next_bbox[0])),
+                min(float(prev_bbox[1]), float(next_bbox[1])),
+                max(float(prev_bbox[2]), float(next_bbox[2])),
+                max(float(prev_bbox[3]), float(next_bbox[3])),
+            ]
+            merged[-1] = combined
+        else:
+            merged.append(block)
+    return merged
+
+
 def export_markdown(pages: list[ExportPage], title: str = "Document") -> str:
     """Markdown multi-colonnes : titres, paragraphes et tableaux."""
     parts: list[str] = [f"# {title}", ""]
     for page in pages:
-        parts.append(f"## Page {page.number}")
-        parts.append("")
-        for block in page.blocks:
+        parts.extend([f"<!-- page {page.number} -->", ""])
+        for block in _merge_paragraphs(page.blocks):
             kind = str(block.get("kind", "line"))
             text = _block_text(block)
             if kind == "title":
@@ -57,23 +163,36 @@ def export_markdown(pages: list[ExportPage], title: str = "Document") -> str:
                         parts.append("| " + " | ".join(str(c) for c in row) + " |")
                     parts.append("")
             else:
-                parts.extend([text, ""])
+                parts.extend([_markdown_styled(text, block), ""])
     return "\n".join(parts).strip() + "\n"
 
 
 def export_docx(pages: list[ExportPage], path: str | Path, title: str = "Document") -> Path:
     """DOCX : titres, paragraphes, tableaux, numérotation d'articles intacte."""
     from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, RGBColor
 
     document = Document()
     document.add_heading(title, level=0)
-    for page in pages:
-        document.add_heading(f"Page {page.number}", level=1)
-        for block in page.blocks:
+    for page_index, page in enumerate(pages):
+        if page_index > 0:
+            document.add_page_break()  # type: ignore[no-untyped-call]
+        blocks = _merge_paragraphs(page.blocks)
+        positions = [
+            (float((block.get("bbox") or [0, 0, 0, 0])[0]),
+             float((block.get("bbox") or [0, 0, 0, 0])[2]))
+            for block in blocks
+        ]
+        page_left = min((left for left, _right in positions), default=0.0)
+        page_right = max((right for _left, right in positions), default=0.0)
+        page_center = (page_left + page_right) / 2.0
+        for block in blocks:
             kind = str(block.get("kind", "line"))
             text = _block_text(block)
+            size, name, bold, italic = _block_style(block)
             if kind == "title":
-                document.add_heading(text, level=2)
+                paragraph = document.add_heading(text, level=2)
             elif kind == "table":
                 grid = block.get("grid") or []
                 if grid:
@@ -82,8 +201,30 @@ def export_docx(pages: list[ExportPage], path: str | Path, title: str = "Documen
                     for row_index, row in enumerate(grid):
                         for col_index, cell in enumerate(row):
                             table.cell(row_index, col_index).text = str(cell)
+                continue
             else:
-                document.add_paragraph(text)
+                paragraph = document.add_paragraph(text)
+            bbox = block.get("bbox") or [0, 0, 0, 0]
+            try:
+                x0 = float(bbox[0])
+                x1 = float(bbox[2])
+            except (TypeError, ValueError, IndexError):
+                x0, x1 = page_left, page_right
+            if kind == "title" and abs((x0 + x1) / 2.0 - page_center) < 20.0:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            elif kind != "title":
+                indent = x0 - page_left
+                if 8.0 < indent < 220.0:
+                    paragraph.paragraph_format.left_indent = Pt(indent)
+            for run in paragraph.runs:
+                if size > 0:
+                    run.font.size = Pt(min(36.0, size))
+                if name:
+                    run.font.name = name
+                run.bold = bold
+                run.italic = italic
+                if kind == "title":
+                    run.font.color.rgb = RGBColor(0, 0, 0)
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     document.save(str(target))
@@ -93,6 +234,7 @@ def export_docx(pages: list[ExportPage], path: str | Path, title: str = "Documen
 def export_xlsx(pages: list[ExportPage], path: str | Path, title: str = "Document") -> Path:
     """XLSX : une feuille, cellules texte, formules neutralisées."""
     import openpyxl
+    from openpyxl.styles import Font
 
     workbook = openpyxl.Workbook()
     sheet = workbook.active
@@ -103,16 +245,25 @@ def export_xlsx(pages: list[ExportPage], path: str | Path, title: str = "Documen
         row_index += 1
         for block in page.blocks:
             kind = str(block.get("kind", "line"))
+            size, name, bold, italic = _block_style(block)
+            font = Font(
+                name=name or None,
+                size=min(36.0, size) if size > 0 else None,
+                bold=bold,
+                italic=italic,
+            )
             if kind == "table":
                 grid = block.get("grid") or []
                 for row in grid:
                     for col_index, value in enumerate(row, start=1):
                         cell = sheet.cell(row=row_index, column=col_index, value=_safe_cell(value))
                         cell.data_type = "s"
+                        cell.font = font
                     row_index += 1
             else:
                 cell = sheet.cell(row=row_index, column=1, value=_safe_cell(_block_text(block)))
                 cell.data_type = "s"
+                cell.font = font
                 row_index += 1
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -128,6 +279,22 @@ def export_pdf(
     """PDF : image de page + couche de texte invisible mais sélectionnable."""
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
+
+    def pdf_font(name: str, bold: bool, italic: bool) -> str:
+        lowered = name.lower()
+        if "times" in lowered:
+            base = "Times"
+        elif "courier" in lowered:
+            base = "Courier"
+        else:
+            base = "Helvetica"
+        if bold and italic:
+            return f"{base}-BoldItalic"
+        if bold:
+            return f"{base}-Bold"
+        if italic:
+            return f"{base}-Italic"
+        return base
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -150,12 +317,18 @@ def export_pdf(
                 x0, y0 = float(bbox[0]) * scale, float(bbox[1]) * scale
             except (TypeError, ValueError, IndexError):
                 x0, y0 = 36.0, page_height - 36.0
-            font_size = max(6.0, min(12.0, (dpi / 300.0) * 9.0))
+            style_size, style_name, bold, italic = _block_style(block)
+            font_size = (
+                max(5.0, min(16.0, style_size))
+                if style_size > 0
+                else max(6.0, min(12.0, (dpi / 300.0) * 9.0))
+            )
+            font = pdf_font(style_name, bold, italic)
             for line_index, line in enumerate(text.splitlines() or [text]):
                 baseline = page_height - y0 - (line_index + 1) * (font_size + 1.5)
                 text_object = pdf.beginText()
                 text_object.setTextRenderMode(3)  # invisible, recherchable
-                text_object.setFont("Helvetica", font_size)
+                text_object.setFont(font, font_size)
                 text_object.setTextOrigin(x0, baseline)
                 text_object.textLine(line[:180])
                 pdf.drawText(text_object)

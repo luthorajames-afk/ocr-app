@@ -33,6 +33,12 @@ class OcrBlock:
     kind: str = "paragraph"
     # Grille de tableau (kind == "table") : lignes de cellules texte.
     grid: tuple[tuple[str, ...], ...] = ()
+    # Mise en forme d'origine (pages natives) : taille en points, police,
+    # gras/italique. 0/"" = inconnu (pages OCR).
+    font_size: float = 0.0
+    font_name: str = ""
+    bold: bool = False
+    italic: bool = False
 
 
 @dataclass(frozen=True, slots=True)

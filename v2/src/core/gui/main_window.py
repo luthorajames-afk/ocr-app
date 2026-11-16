@@ -352,6 +352,23 @@ class ResultsPanel(QTabWidget):
     def _block_html(block: dict[str, object]) -> str:
         content = escape(str(block.get("text", "")))
         kind = str(block.get("kind", "line"))
+        declared = block.get("font_size")
+        size = (
+            float(declared)
+            if isinstance(declared, (int, float, str))
+            else 0.0
+        )
+        name = str(block.get("font_name") or "")
+        css: list[str] = []
+        if 0.0 < size < 40.0:
+            css.append(f"font-size:{size:.1f}pt")
+        if name:
+            css.append(f"font-family:{escape(name, quote=True)}")
+        if block.get("bold"):
+            css.append("font-weight:bold")
+        if block.get("italic"):
+            css.append("font-style:italic")
+        style = f" style='{';'.join(css)}'" if css else ""
         if kind == "table":
             grid = block.get("grid") or []
             rows_html = []
@@ -364,13 +381,13 @@ class ResultsPanel(QTabWidget):
                 )
                 rows_html.append(f"<tr>{cells}</tr>")
             return (
-                "<table style='border-collapse:collapse;margin:6px 0'>"
+                f"<table style='border-collapse:collapse;margin:6px 0'{style}>"
                 + "".join(rows_html)
                 + "</table>"
             )
         if kind == "title":
-            return f"<h2 style='margin:6px 0'>{content}</h2>"
-        return f"<p style='margin:2px 0'>{content}</p>"
+            return f"<h2 style='margin:6px 0'{style}>{content}</h2>"
+        return f"<p style='margin:2px 0'{style}>{content}</p>"
 
     def _render_blocks(self, blocks: list[object]) -> list[str]:
         """Rendu : colonnes côte à côte quand la page en contient plusieurs."""

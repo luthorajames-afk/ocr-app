@@ -212,6 +212,10 @@ class Worker:
                                 "confidence": block.confidence,
                                 "kind": block.kind,
                                 "grid": [list(row) for row in block.grid],
+                                "font_size": block.font_size,
+                                "font_name": block.font_name,
+                                "bold": block.bold,
+                                "italic": block.italic,
                             }
                             for block in page.blocks
                         ]
@@ -269,6 +273,10 @@ class Worker:
                                 "confidence": block.confidence,
                                 "kind": block.kind,
                                 "grid": [list(row) for row in block.grid],
+                                "font_size": block.font_size,
+                                "font_name": block.font_name,
+                                "bold": block.bold,
+                                "italic": block.italic,
                             }
                             for block in result.blocks
                         ]

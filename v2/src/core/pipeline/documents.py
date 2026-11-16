@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import unicodedata
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pypdfium2 as pdfium
@@ -81,17 +81,74 @@ def _text_layer_words(
     if not chars:
         return []
 
-    # Lignes : la baseline (bottom) est stable, contrairement au centre.
-    # Ancrer sur la baseline MAX du groupe (les jambages descendent plus bas)
-    # évite qu'une ligne se fragmente en pseudo-lignes.
-    chars.sort(key=lambda char: (-char[1], char[0]))
-    lines: list[tuple[float, list[tuple[float, float, float, float, str]]]] = []
-    for char in chars:
-        if lines and lines[-1][0] - char[1] <= 6.5:
-            baseline, items = lines[-1]
-            lines[-1] = (max(baseline, char[1]), items + [char])
+    # 1) Regrouper les glyphes pleins par baseline réelle (les jambages et
+    # exposants ne doivent pas créer de fausses lignes).
+    solid = (
+        [char for char in chars if (char[3] - char[1]) > median_height * 0.4]
+        if median_height > 0
+        else list(chars)
+    )
+    solid.sort(key=lambda char: (char[1], char[0]))
+    tolerance = max(2.5, median_height * 0.3)
+    clusters: list[tuple[float, list[tuple[float, float, float, float, str]]]] = []
+    for char in solid:
+        if clusters and abs(char[1] - clusters[-1][0]) <= tolerance:
+            items = clusters[-1][1]
+            items.append(char)
+            clusters[-1] = (sum(item[1] for item in items) / len(items), items)
         else:
-            lines.append((char[1], [char]))
+            clusters.append((char[1], [char]))
+
+    # 2) Fusionner apostrophes/exposants proches qui recouvrent la ligne en x.
+    merge_tolerance = max(7.0, median_height)
+    merged = True
+    while merged:
+        merged = False
+        for first in range(len(clusters)):
+            for second in range(first + 1, len(clusters)):
+                first_baseline, first_items = clusters[first]
+                second_baseline, second_items = clusters[second]
+                if abs(first_baseline - second_baseline) > merge_tolerance:
+                    continue
+                first_left = min(item[0] for item in first_items)
+                first_right = max(item[2] for item in first_items)
+                second_left = min(item[0] for item in second_items)
+                second_right = max(item[2] for item in second_items)
+                if min(first_right, second_right) - max(first_left, second_left) <= 0:
+                    continue
+                combined = first_items + second_items
+                clusters[first] = (
+                    sum(item[1] for item in combined) / len(combined),
+                    combined,
+                )
+                del clusters[second]
+                merged = True
+                break
+            if merged:
+                break
+
+    # 3) Assigner les caractères restants (espaces, petits glyphes) à la
+    # baseline la plus proche ; sinon, nouvelle ligne.
+    assigned = {id(char) for _baseline, items in clusters for char in items}
+    assign_tolerance = max(8.0, median_height * 1.1)
+    for char in chars:
+        if id(char) in assigned:
+            continue
+        if not clusters:
+            clusters.append((char[1], [char]))
+            assigned.add(id(char))
+            continue
+        nearest = min(
+            range(len(clusters)),
+            key=lambda index: abs(char[1] - clusters[index][0]),
+        )
+        if abs(char[1] - clusters[nearest][0]) <= assign_tolerance:
+            clusters[nearest][1].append(char)
+            assigned.add(id(char))
+        else:
+            clusters.append((char[1], [char]))
+            assigned.add(id(char))
+    lines = clusters
 
     words: list[tuple[float, float, float, float, str]] = []
     for _baseline, items in lines:
@@ -101,18 +158,20 @@ def _text_layer_words(
             if height < median_height * 0.7:
                 continue
         items.sort(key=lambda char: char[0])
-        # Seuil de coupure de mot propre à la ligne : le texte en petites
-        # capitales espacées (titres) a des écarts inter-lettres plus larges
-        # que les espaces de mots d'un paragraphe.
+        # Quand la couche texte contient de vrais espaces, ce sont eux qui
+        # délimitent les mots : ne couper sur un écart géométrique que pour
+        # les colonnes (grand blanc sans caractère espace). Sinon, seuil
+        # déduit des petits écarts intra-mot de la ligne.
+        has_spaces = any(char[4].isspace() for char in items)
         gaps = [
             items[index + 1][0] - items[index][2]
             for index in range(len(items) - 1)
             if not items[index][4].isspace() and not items[index + 1][4].isspace()
         ]
-        # Ne garder que les écarts intra-mot : les grands blancs de colonnes
-        # ne doivent pas gonfler le seuil.
         gaps = sorted(gap for gap in gaps if 0.0 < gap <= 3.0)
-        if gaps:
+        if has_spaces:
+            word_gap = max(6.0, median_height * 0.8)
+        elif gaps:
             word_gap = min(6.0, max(2.2, gaps[len(gaps) // 2] * 2.2))
         else:
             word_gap = 2.2
@@ -148,6 +207,133 @@ def _text_layer_words(
     return words
 
 
+def _text_object_styles(
+    textpage: pdfium.PdfTextPage,
+) -> list[tuple[tuple[float, float, float, float], str, float, bool, bool]]:
+    """Polices des objets texte de la page (famille, taille, gras, italique).
+
+    ``get_textobj`` renvoie l'objet texte contenant le caractère demandé ;
+    on déduplique par bornes + nom de base. La taille vient de la matrice
+    quand elle est exploitable (> 1,5 pt), sinon elle est estimée à partir
+    de la hauteur de l'objet, calibrée sur les autres objets de la page.
+    """
+    seen: set[tuple[tuple[float, ...], str]] = set()
+    entries: list[tuple[tuple[float, float, float, float], str, float, bool, bool]] = []
+    for index in range(textpage.count_chars()):
+        try:
+            obj = textpage.get_textobj(index)
+        except Exception:  # noqa: BLE001, S112 — objet texte absent
+            continue
+        if obj is None:
+            continue
+        try:
+            font = obj.get_font()
+            base = font.get_base_name()
+            bounds = tuple(round(value, 2) for value in obj.get_bounds())
+            matrix = obj.get_matrix()
+            size = abs(matrix.a) or abs(matrix.d)
+        except Exception:  # noqa: BLE001, S112 — objet illisible
+            continue
+        key = (bounds, base)
+        if key in seen:
+            continue
+        seen.add(key)
+        lowered = base.lower()
+        entries.append(
+            (
+                (bounds[0], bounds[1], bounds[2], bounds[3]),
+                font.get_family_name(),
+                size,
+                "bold" in lowered or font.get_weight() >= 600,
+                "italic" in lowered or "oblique" in lowered,
+            )
+        )
+    ratios = [
+        size / (bounds[3] - bounds[1])
+        for bounds, _family, size, _bold, _italic in entries
+        if size > 1.5 and (bounds[3] - bounds[1]) > 2.0
+    ]
+    if ratios:
+        ratios.sort()
+        factor = ratios[len(ratios) // 2]
+    else:
+        factor = 0.85
+    styled: list[tuple[tuple[float, float, float, float], str, float, bool, bool]] = []
+    for bounds, family, size, bold, italic in entries:
+        if size <= 1.5:
+            size = max(5.0, (bounds[3] - bounds[1]) * factor)
+        styled.append((bounds, family, round(size, 1), bold, italic))
+    return styled
+
+
+def _apply_styles(blocks: list[OcrBlock], textpage: pdfium.PdfTextPage) -> list[OcrBlock]:
+    """Attribue à chaque bloc la police dominante des objets texte qui le recouvrent."""
+    try:
+        styles = _text_object_styles(textpage)
+    except Exception:  # noqa: BLE001 — page sans objets texte
+        return blocks
+    if not styles:
+        return blocks
+    matches: list[tuple[OcrBlock, tuple[float, float, float, float], str, float, bool, bool, float]] = []
+    for block in blocks:
+        left, top, right, bottom = block.bbox
+        best_area = 0.0
+        best: tuple[tuple[float, float, float, float], str, float, bool, bool] | None = None
+        for style in styles:
+            sl, sb, sr, st = style[0]
+            overlap_width = max(0.0, min(right, sr) - max(left, sl))
+            overlap_height = max(0.0, min(bottom, st) - max(top, sb))
+            area = overlap_width * overlap_height
+            if area > best_area:
+                best_area = area
+                best = style
+        coverage = (
+            best_area / max(1e-6, (right - left) * (bottom - top)) if best else 0.0
+        )
+        matches.append(
+            (
+                block,
+                best[0] if best else (0.0, 0.0, 0.0, 0.0),
+                best[1] if best else "",
+                best[2] if best else 0.0,
+                best[3] if best else False,
+                best[4] if best else False,
+                coverage,
+            )
+        )
+
+    ratios = [
+        size / max(1e-6, match[0].bbox[3] - match[0].bbox[1])
+        for match in matches
+        for size in (match[3],)
+        if match[6] >= 0.2 and size > 0 and (match[0].bbox[3] - match[0].bbox[1]) > 2.0
+    ]
+    if ratios:
+        ratios.sort()
+        factor = ratios[len(ratios) // 2]
+    else:
+        factor = 0.85
+    families = [match[2] for match in matches if match[2]]
+    fallback_family = max(set(families), key=families.count) if families else ""
+
+    styled: list[OcrBlock] = []
+    for block, _bounds, family, size, bold, italic, coverage in matches:
+        height = block.bbox[3] - block.bbox[1]
+        if size <= 0:
+            size = max(5.0, height * factor)
+            bold = italic = False
+        styled.append(
+            replace(
+                block,
+                font_size=round(size, 1),
+                font_name=family if coverage >= 0.2 else fallback_family,
+                bold=bold,
+                italic=italic,
+            )
+        )
+    return styled
+
+
 def _native_blocks(page: pdfium.PdfPage, page_height: float) -> list[OcrBlock]:
     """Segmente la couche texte d'un PDF natif en blocs ordonnés (multi-colonnes).
 
@@ -167,7 +353,8 @@ def _native_blocks(page: pdfium.PdfPage, page_height: float) -> list[OcrBlock]:
     heights = sorted(rect[3] - rect[1] for rect in rects)
     median_height = heights[len(heights) // 2] if heights else 10.0
 
-    return _native_tables_and_columns(rects, page_height, median_height)
+    blocks = _native_tables_and_columns(rects, page_height, median_height)
+    return _apply_styles(blocks, textpage)
 
 
 def _cluster_columns(
@@ -259,7 +446,11 @@ def _row_block(
 ) -> OcrBlock | None:
     """Une ligne de texte = un bloc (et non un bloc par mot)."""
     merged = _merge_row_cells(row, cell_gap)
-    text = " ".join(cell[0] for cell in merged if cell[0].strip()).strip()
+    text = ""
+    for cell in merged:
+        if cell[0].strip():
+            text = _join_text(text, cell[0].strip())
+    text = text.strip()
     if not text or not any(char.isalnum() for char in text):
         return None
     left = min(rect[0] for rect in row)
@@ -361,16 +552,20 @@ def _merge_row_cells(
     cells: list[tuple[str, float, float]] = []
     heights = sorted(max(0.0, rect[3] - rect[1]) for rect in row)
     median_height = heights[len(heights) // 2] if heights else 0.0
-    for left, _bottom, right, _top, text in row:
+    bottoms = sorted(rect[1] for rect in row)
+    baseline = bottoms[len(bottoms) // 2] if bottoms else 0.0
+    for left, bottom, right, top, text in row:
         clean = normalize_text(text).replace(chr(10), " ").strip()
         if not clean:
             continue
-        # Marqueur superscript isolé (a, p, s, c, m) : bruit de couche texte.
+        # Marqueur superscript isolé (a, p, s, c, m) : lettre seule, petite ET
+        # surélevée par rapport à la baseline. Un « n » de « n° » reste.
         if (
             len(clean) == 1
             and clean.isalpha()
             and median_height > 0
-            and (_top - _bottom) < median_height * 0.7
+            and (top - bottom) < median_height * 0.7
+            and bottom > baseline + median_height * 0.25
         ):
             continue
         gap = left - cells[-1][2] if cells else 0.0
@@ -382,11 +577,43 @@ def _merge_row_cells(
         )
         if cells and gap <= cell_gap and not numeric_break:
             previous_text, previous_left, _previous_right = cells[-1]
-            joined = _normalise_cell(f"{previous_text} {clean}".strip())
+            joined = _normalise_cell(_join_text(previous_text, clean))
             cells[-1] = (joined, previous_left, right)
         else:
             cells.append((_normalise_cell(clean), left, right))
     return cells
+
+
+_NO_SPACE_BEFORE = ",.)]}»…"
+_NO_SPACE_AFTER = "([{«"
+_APOSTROPHES = "'’"
+
+
+def _join_text(left: str, right: str) -> str:
+    """Assemble deux fragments en respectant la ponctuation française.
+
+    Pas d'espace avant ``, . ) ] } »`` ni après ``( [ { «`` ; le trait
+    d'union et l'apostrophe ne se collent qu'entre deux lettres
+    (``Nord-Quest``, ``d’organisation``). En revanche ``; : ! ?`` gardent
+    l'espace française qui les précède.
+    """
+    if not left:
+        return right
+    if not right:
+        return left
+    if right[0] in _NO_SPACE_BEFORE:
+        return left + right
+    if left[-1] in _NO_SPACE_AFTER:
+        return left + right
+    if right[0] == "-" and left[-1].isalpha():
+        return left + right
+    if left[-1] == "-" and len(left) > 1 and left[-2].isalpha() and right[0].isalpha():
+        return left + right
+    if right[0] in _APOSTROPHES and left[-1].isalnum():
+        return left + right
+    if left[-1] in _APOSTROPHES and right[0].isalnum():
+        return left + right
+    return f"{left} {right}"
 
 
 def _normalise_cell(text: str) -> str:

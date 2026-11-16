@@ -90,3 +90,59 @@ def test_pdf_includes_page_image_when_available(tmp_path: Path) -> None:
     page = ExportPage(number=1, blocks=[{"kind": "line", "text": "bonjour"}], image_path=str(image_path))
     path = export_pdf([page], tmp_path / "avec_image.pdf")
     assert path.stat().st_size > 0
+
+
+def test_markdown_uses_page_anchor_instead_of_heading() -> None:
+    markdown = export_markdown([PAGE], title="Journal")
+    assert "<!-- page 1 -->" in markdown
+    assert "## Page 1" not in markdown
+
+
+def test_docx_preserves_font_and_page_break(tmp_path: Path) -> None:
+    pages = [
+        ExportPage(
+            number=1,
+            blocks=[
+                {
+                    "kind": "line",
+                    "text": "Ligne de style",
+                    "bbox": [40, 40, 500, 52],
+                    "font_size": 9.0,
+                    "font_name": "Times New Roman",
+                    "bold": True,
+                }
+            ],
+        ),
+        ExportPage(
+            number=2,
+            blocks=[{"kind": "line", "text": "Deuxième page", "bbox": [40, 40, 500, 52]}],
+        ),
+    ]
+    path = export_docx(pages, tmp_path / "styles.docx", title="Essai")
+    from docx import Document
+
+    document = Document(str(path))
+    run = document.paragraphs[1].runs[0]
+    assert run.font.size is not None and abs(run.font.size.pt - 9.0) < 0.01
+    assert run.font.name == "Times New Roman"
+    assert run.bold is True
+    breaks = [run for paragraph in document.paragraphs for run in paragraph.runs]
+    assert any('w:type="page"' in run._r.xml for run in breaks)
+
+
+def test_docx_merges_wrapped_paragraph_lines(tmp_path: Path) -> None:
+    page = ExportPage(
+        number=1,
+        blocks=[
+            {"kind": "line", "text": "Le présent décret fixe les modalités", "bbox": [40, 100, 520, 112]},
+            {"kind": "line", "text": "d'application du texte.", "bbox": [40, 112, 300, 124]},
+            {"kind": "line", "text": "Fin de phrase.", "bbox": [40, 140, 520, 152]},
+            {"kind": "line", "text": "Nouvelle phrase.", "bbox": [40, 152, 520, 164]},
+        ],
+    )
+    path = export_docx([page], tmp_path / "paragraphes.docx", title="Essai")
+    from docx import Document
+
+    texts = [paragraph.text for paragraph in Document(str(path)).paragraphs]
+    assert "Le présent décret fixe les modalités d'application du texte." in texts
+    assert "Fin de phrase." in texts and "Nouvelle phrase." in texts

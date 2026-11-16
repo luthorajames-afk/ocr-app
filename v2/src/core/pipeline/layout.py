@@ -1,32 +1,109 @@
-"""Lecture multi-colonnes : regroupement et ordre des blocs OCR."""
+"""Lecture multi-colonnes : gouttières réelles et ordre des blocs OCR."""
 
 from __future__ import annotations
 
 from core.pipeline.interfaces import OcrBlock
 
-COLUMN_TOLERANCE = 40.0
+GUTTER_MIN_WIDTH = 20.0
+WIDE_BLOCK_RATIO = 0.6
+MAX_COLUMNS = 4
 
 
-def order_blocks_in_columns(blocks: tuple[OcrBlock, ...] | list[OcrBlock]) -> list[OcrBlock]:
-    """Ordonne les blocs par colonne (x croissant) puis de haut en bas.
+def _merge_intervals(intervals: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    merged: list[tuple[float, float]] = []
+    for left, right in sorted(intervals):
+        if merged and left <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], right))
+        else:
+            merged.append((left, right))
+    return merged
 
-    Les blocs dont la bbox est vide (0,0,0,0) sont conservés en fin de liste,
-    dans leur ordre d'origine.
+
+def _column_ranges(blocks: list[OcrBlock], page_width: float) -> list[tuple[float, float]]:
+    """Colonnes = segments séparés par une gouttière libre de tout bloc.
+
+    Les blocs pleine largeur (en-têtes, titres, pieds de page) sont exclus :
+    ce sont eux qui relient visuellement les colonnes.
+    """
+    if page_width <= 0:
+        return []
+    narrow = [
+        block
+        for block in blocks
+        if (block.bbox[2] - block.bbox[0]) < page_width * WIDE_BLOCK_RATIO
+    ]
+    if not narrow:
+        return []
+    merged = _merge_intervals([(block.bbox[0], block.bbox[2]) for block in narrow])
+    if not 2 <= len(merged) <= MAX_COLUMNS:
+        return []
+    gutters = [
+        merged[index + 1][0] - merged[index][1]
+        for index in range(len(merged) - 1)
+    ]
+    if any(gutter < GUTTER_MIN_WIDTH for gutter in gutters):
+        return []
+    return merged
+
+
+def _column_of(block: OcrBlock, columns: list[tuple[float, float]]) -> int:
+    best_index = 0
+    best_overlap = float("-inf")
+    for index, (left, right) in enumerate(columns):
+        overlap = min(block.bbox[2], right) - max(block.bbox[0], left)
+        if overlap > best_overlap:
+            best_index = index
+            best_overlap = overlap
+    return best_index
+
+
+def order_blocks_in_columns(
+    blocks: tuple[OcrBlock, ...] | list[OcrBlock],
+) -> list[OcrBlock]:
+    """Ordonne les blocs en respectant les colonnes, si elles existent.
+
+    Les blocs sans géométrie sont conservés en fin de liste. Les blocs
+    pleine largeur découpent la page en bandes : les colonnes ne s'appliquent
+    qu'à l'intérieur d'une bande (en-tête, contenu, pied de page).
     """
     positioned = [block for block in blocks if block.bbox[2] > block.bbox[0]]
     unpositioned = [block for block in blocks if block.bbox[2] <= block.bbox[0]]
+    if not positioned:
+        return unpositioned
 
-    columns: list[tuple[float, list[OcrBlock]]] = []
-    for block in sorted(positioned, key=lambda item: item.bbox[0]):
-        for _left, column_blocks in columns:
-            if abs(block.bbox[0] - _left) < COLUMN_TOLERANCE:
-                column_blocks.append(block)
-                break
-        else:
-            columns.append((block.bbox[0], [block]))
-    columns.sort(key=lambda column: column[0])
+    page_width = max(block.bbox[2] for block in positioned)
+    wide = [
+        block
+        for block in positioned
+        if (block.bbox[2] - block.bbox[0]) >= page_width * WIDE_BLOCK_RATIO
+    ]
+    narrow = [block for block in positioned if block not in wide]
+    columns = _column_ranges(narrow, page_width) or [(-1.0, float("inf"))]
 
+    def sort_key(block: OcrBlock) -> tuple[int, float, float]:
+        return (_column_of(block, columns), block.bbox[1], block.bbox[0])
+
+    wide.sort(key=lambda block: (block.bbox[1], block.bbox[0]))
     ordered: list[OcrBlock] = []
-    for _left, column_blocks in columns:
-        ordered.extend(sorted(column_blocks, key=lambda item: (item.bbox[1], item.bbox[0])))
+    cursor = 0.0
+    remaining = list(narrow)
+    for separator in wide:
+        band = [
+            block
+            for block in remaining
+            if cursor <= (block.bbox[1] + block.bbox[3]) / 2.0 < separator.bbox[1]
+        ]
+        ordered.extend(sorted(band, key=sort_key))
+        remaining = [block for block in remaining if block not in band]
+        ordered.append(separator)
+        cursor = max(cursor, separator.bbox[3])
+    tail = [
+        block
+        for block in remaining
+        if (block.bbox[1] + block.bbox[3]) / 2.0 >= cursor
+    ]
+    ordered.extend(sorted(tail, key=sort_key))
+    ordered.extend(
+        block for block in remaining if block not in tail
+    )
     return ordered + unpositioned
