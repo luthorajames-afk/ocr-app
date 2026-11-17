@@ -340,6 +340,7 @@ class SearchWindow(QDialog):
         function: Callable[[], object],
         on_done: Callable[[object], None],
         label: str,
+        needs_embedder: bool = False,
     ) -> None:
         if self._busy:
             return
@@ -347,6 +348,17 @@ class SearchWindow(QDialog):
         self.status_label.setText(label)
         self.index_btn.setEnabled(False)
         self.search_btn.setEnabled(False)
+        if needs_embedder:
+            # Charger le modèle dans le thread principal : le faire depuis un
+            # QThread fait échouer le chargeur DLL de Windows (build gelé).
+            try:
+                _ = self.service.embedder
+            except Exception as exc:  # noqa: BLE001 — remonté au statut
+                self._finished()
+                self.status_label.setText(
+                    f"Modèle de recherche indisponible : {exc}"
+                )
+                return
         if self.synchronous:
             try:
                 result = function()
@@ -385,6 +397,7 @@ class SearchWindow(QDialog):
             self.service.index_new,
             self._on_indexed,
             "Indexation des documents traités…",
+            needs_embedder=True,
         )
 
     def _on_indexed(self, report: object) -> None:
@@ -415,6 +428,7 @@ class SearchWindow(QDialog):
             lambda: self.service.search(query, k=20, mode=mode),
             self._on_search,
             "Recherche…",
+            needs_embedder=mode in ("hybrid", "semantic"),
         )
 
     def _on_search(self, hits: object) -> None:

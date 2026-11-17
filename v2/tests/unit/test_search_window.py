@@ -58,6 +58,7 @@ class FakeService:
         self.doc_b = make_meta("/docs/b.pdf", "bbb")
         self.model_error = None
         self.indexed = False
+        self.embedder = object()  # préchargement simulé
 
     def status(self) -> tuple[int, int]:
         return 2, 4
