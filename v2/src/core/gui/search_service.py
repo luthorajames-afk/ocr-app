@@ -41,16 +41,42 @@ class SearchService:
         work_root: str | Path | None = None,
         embedder: Embedder | None = None,
     ) -> None:
-        self.index = CorpusIndex(index_dir or default_index_dir())
+        self._index_dir = Path(index_dir) if index_dir else default_index_dir()
+        self.index = self._build_index()
         self.work_root = Path(work_root) if work_root else default_work_root()
         self._embedder = embedder
         self._model_error: str | None = None
         self._index_lock = threading.Lock()
+        self._index: CorpusIndex | None = None
+        self._index_init_error: str | None = None
 
     # ------------------------------------------------------------------ base
+    def _build_index(self) -> CorpusIndex:
+        """Construit l'index ; un échec ( Chroma natif) retombe sur numpy."""
+        try:
+            return CorpusIndex(self._index_dir)
+        except Exception as exc:  # noqa: BLE001 — remonté via model_error
+            self._index_init_error = str(exc)
+            return CorpusIndex(self._index_dir, backend="numpy")
+
+    def ensure_index(self) -> CorpusIndex:
+        """Index garanti construit (lève si vraiment indisponible)."""
+        if self.index is None:
+            self.index = self._build_index()
+        return self.index
+
+    @property
+    def index_init_error(self) -> str | None:
+        return self._index_init_error
+
     @property
     def embedder(self) -> Embedder:
         if self._embedder is None:
+            # Préchargement des DLL lourdes dans le thread appelant (main) :
+            # les charger depuis un thread gèle le chargeur Windows.
+            import onnxruntime  # noqa: F401 — préchargement DLL
+            import transformers  # noqa: F401
+
             self._embedder = OnnxE5Embedder()
         return self._embedder
 
@@ -59,10 +85,14 @@ class SearchService:
         return self._model_error
 
     def documents(self) -> list[DocumentMeta]:
+        if self.index is None:
+            return []
         return self.index.documents()
 
     def status(self) -> tuple[int, int]:
         """(nombre de documents, nombre de pages) indexés."""
+        if self.index is None:
+            return 0, 0
         return len(self.index.documents()), self.index.page_count()
 
     def work_dirs(self) -> list[Path]:
@@ -87,13 +117,14 @@ class SearchService:
             raise
 
     def search(self, query: str, k: int = 10, mode: str = "hybrid") -> list[SearchHit]:
-        return search(self.index, self.embedder, query, k=k, mode=mode)
+        return search(self.ensure_index(), self.embedder, query, k=k, mode=mode)
 
     def similar(
         self, threshold: float = 0.75, *, source: str | None = None
     ) -> list[SimilarPair]:
-        mode = "topk" if len(self.index.documents()) > 200 else "exact"
-        pairs = similar_documents(self.index, threshold, mode=mode)
+        index = self.ensure_index()
+        mode = "topk" if len(index.documents()) > 200 else "exact"
+        pairs = similar_documents(index, threshold, mode=mode)
         if source:
             wanted = str(Path(source).resolve())
             pairs = [
@@ -105,5 +136,6 @@ class SearchService:
         return pairs
 
     def duplicates(self, threshold: float = 0.95) -> list[SimilarPair]:
-        mode = "topk" if len(self.index.documents()) > 200 else "exact"
-        return similar_documents(self.index, threshold, mode=mode)
+        index = self.ensure_index()
+        mode = "topk" if len(index.documents()) > 200 else "exact"
+        return similar_documents(index, threshold, mode=mode)

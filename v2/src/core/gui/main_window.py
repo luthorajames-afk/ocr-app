@@ -1205,6 +1205,12 @@ class MainWindow(QMainWindow):
         if self._auto_indexed:
             return
         self._auto_indexed = True
+        try:
+            # Précharger onnxruntime/transformers dans le thread principal :
+            # le faire depuis un QThread gèle le chargeur DLL de Windows.
+            _ = self._search_service.embedder
+        except Exception:  # noqa: BLE001 — modèle absent : indexation ignorée
+            return
         job = _Job(lambda: self._search_service.index_new())
         job.done.connect(self._on_auto_index_done)
         job.failed.connect(

@@ -36,6 +36,8 @@ def build_command() -> list[str]:
         str(PROJECT / "src"),
         "--collect-submodules",
         "core",
+        "--collect-all",
+        "chromadb",
         "--hidden-import",
         "PySide6.QtSvg",
         str(PROJECT / "src" / "core" / "gui" / "__main__.py"),
