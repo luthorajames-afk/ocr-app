@@ -1,0 +1,107 @@
+"""Service de recherche et similarité pour l'interface (noyau sans Qt).
+
+Enveloppe ``core.indexing`` : indexation incrémentale des dossiers work
+AOCRI, recherche hybride, documents similaires et doublons. Le modèle e5
+n'est chargé qu'au premier besoin (lazy) et peut être remplacé par un
+embedder de test.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from core.indexing.embedder import Embedder, OnnxE5Embedder
+from core.indexing.search import (
+    IndexReport,
+    SearchHit,
+    SimilarPair,
+    index_work_dirs,
+    search,
+    similar_documents,
+)
+from core.indexing.store import CorpusIndex, DocumentMeta, default_index_dir
+
+
+def default_work_root() -> Path:
+    """Dossier des traitements AOCRI (``%LOCALAPPDATA%/AOCRI/work``)."""
+    local = os.environ.get("LOCALAPPDATA")
+    base = Path(local) if local else Path.home() / ".aocri"
+    return base / "AOCRI" / "work"
+
+
+class SearchService:
+    """Façade index/recherche utilisée par la fenêtre de recherche."""
+
+    def __init__(
+        self,
+        *,
+        index_dir: str | Path | None = None,
+        work_root: str | Path | None = None,
+        embedder: Embedder | None = None,
+    ) -> None:
+        self.index = CorpusIndex(index_dir or default_index_dir())
+        self.work_root = Path(work_root) if work_root else default_work_root()
+        self._embedder = embedder
+        self._model_error: str | None = None
+
+    # ------------------------------------------------------------------ base
+    @property
+    def embedder(self) -> Embedder:
+        if self._embedder is None:
+            self._embedder = OnnxE5Embedder()
+        return self._embedder
+
+    @property
+    def model_error(self) -> str | None:
+        return self._model_error
+
+    def documents(self) -> list[DocumentMeta]:
+        return self.index.documents()
+
+    def status(self) -> tuple[int, int]:
+        """(nombre de documents, nombre de pages) indexés."""
+        return len(self.index.documents()), self.index.page_count()
+
+    def work_dirs(self) -> list[Path]:
+        """Dossiers work contenant au moins une page JSON."""
+        if not self.work_root.is_dir():
+            return []
+        return sorted(
+            directory
+            for directory in self.work_root.iterdir()
+            if directory.is_dir() and any(directory.glob("page_*.json"))
+        )
+
+    # --------------------------------------------------------------- actions
+    def index_new(self, *, replace: bool = False) -> IndexReport:
+        self._model_error = None
+        try:
+            return index_work_dirs(
+                self.work_dirs(), self.embedder, self.index, replace=replace
+            )
+        except Exception as exc:
+            self._model_error = str(exc)
+            raise
+
+    def search(self, query: str, k: int = 10, mode: str = "hybrid") -> list[SearchHit]:
+        return search(self.index, self.embedder, query, k=k, mode=mode)
+
+    def similar(
+        self, threshold: float = 0.75, *, source: str | None = None
+    ) -> list[SimilarPair]:
+        mode = "topk" if len(self.index.documents()) > 200 else "exact"
+        pairs = similar_documents(self.index, threshold, mode=mode)
+        if source:
+            wanted = str(Path(source).resolve())
+            pairs = [
+                pair
+                for pair in pairs
+                if str(Path(pair.doc_a.source).resolve()) == wanted
+                or str(Path(pair.doc_b.source).resolve()) == wanted
+            ]
+        return pairs
+
+    def duplicates(self, threshold: float = 0.95) -> list[SimilarPair]:
+        mode = "topk" if len(self.index.documents()) > 200 else "exact"
+        return similar_documents(self.index, threshold, mode=mode)

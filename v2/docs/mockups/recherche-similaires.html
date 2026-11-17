@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Maquette — Recherche &amp; documents similaires (AOCRI v2)</title>
+<style>
+  :root{
+    --bg:#17181c; --panel:#24262c; --panel2:#2b2e36; --border:#3a3e49;
+    --text:#e6e8ee; --muted:#9aa0ad; --accent:#7d98ff; --accent-soft:rgba(125,152,255,.16);
+    --amber:#e8b45a; --green:#5fce8f; --red:#e57373; --paper:#f5f4ef; --ink:#22252b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:"Segoe UI",sans-serif}
+  body{background:#0f1013;color:var(--text);display:flex;justify-content:center;padding:22px}
+  .window{width:1160px;height:760px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg);box-shadow:0 18px 60px rgba(0,0,0,.55);display:flex;flex-direction:column}
+  .titlebar{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--panel);border-bottom:1px solid var(--border);font-size:12.5px;color:var(--muted)}
+  .titlebar b{color:var(--text)}
+  .status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11.5px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .btn{border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:7px;padding:6px 12px;font-size:12px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--panel);border-bottom:1px solid var(--border)}
+  .tab{padding:9px 16px;font-size:13px;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+  .content{flex:1;display:flex;min-height:0}
+  .main{flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+  .searchbar{display:flex;gap:8px}
+  .searchbar input{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px 12px;font-size:13.5px;outline:none}
+  .searchbar input:focus{border-color:rgba(125,152,255,.6)}
+  .seg{display:flex;background:var(--panel2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg span{padding:9px 12px;font-size:12px;color:var(--muted);cursor:pointer}
+  .seg span.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .meta-row{display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--muted)}
+  .results{flex:1;overflow:auto;display:flex;flex-direction:column;gap:6px}
+  .hit{border:1px solid var(--border);background:var(--panel);border-radius:8px;padding:10px 12px;display:flex;gap:12px;align-items:flex-start;cursor:pointer}
+  .hit:hover{border-color:rgba(125,152,255,.45)}
+  .hit.sel{background:var(--accent-soft);border-color:var(--accent)}
+  .score{flex:none;width:56px;text-align:center;font-weight:700;font-size:13px;color:var(--accent)}
+  .score small{display:block;font-weight:400;font-size:9.5px;color:var(--muted)}
+  .hit .doc{font-size:12.5px;font-weight:600}
+  .hit .page{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .hit .excerpt{font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:5px}
+  .hit mark{background:rgba(232,180,90,.28);color:var(--text);border-radius:3px;padding:0 2px}
+  /* Panneau aperçu */
+  .side{width:340px;border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column}
+  .side header{padding:12px 14px;border-bottom:1px solid var(--border);font-size:12.5px;font-weight:600}
+  .side .paper{margin:12px;background:var(--paper);color:var(--ink);border-radius:4px;padding:16px 15px;font-family:Georgia,serif;font-size:10.5px;line-height:1.5;flex:1;overflow:auto;box-shadow:0 6px 22px rgba(0,0,0,.35)}
+  .side .paper h5{text-align:center;font-size:11.5px;margin-bottom:9px}
+  .side .paper mark{background:rgba(125,152,255,.35);outline:1px solid var(--accent);border-radius:2px}
+  .side .actions{padding:10px 12px;display:flex;gap:8px;border-top:1px solid var(--border)}
+  /* Onglet similaires */
+  .sim-head{display:flex;align-items:center;gap:14px;font-size:12px;color:var(--muted)}
+  .slider{flex:1;height:4px;background:var(--panel2);border-radius:3px;position:relative}
+  .slider i{position:absolute;left:0;top:0;bottom:0;width:62%;background:var(--accent);border-radius:3px}
+  .slider b{position:absolute;left:62%;top:-5px;width:14px;height:14px;border-radius:50%;background:var(--accent);transform:translateX(-50%)}
+  .pair{border:1px solid var(--border);background:var(--panel);border-radius:9px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+  .pair .line{display:flex;align-items:center;gap:10px}
+  .pair .line .name{font-size:12.5px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pair .badge{flex:none;font-size:12px;font-weight:700;padding:4px 10px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+  .pair .badge.warn{background:rgba(232,180,90,.16);color:var(--amber)}
+  .pair .pages{font-size:10.8px;color:var(--muted)}
+  .pair .acts{display:flex;gap:8px;margin-top:2px}
+  .note{padding:9px 14px;border-top:1px solid var(--border);background:var(--panel);font-size:11px;color:var(--muted)}
+  .note em{color:var(--accent);font-style:normal}
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <b>AOCRI</b> — Recherche &amp; documents similaires
+    <span class="status"><span class="dot"></span> index local : 2 documents · 5 pages · e5-base</span>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-tab="search">Rechercher</div>
+    <div class="tab" data-tab="similar">Documents similaires</div>
+    <div class="tab" data-tab="dupes">Doublons</div>
+  </div>
+  <div class="content" data-pane="search">
+    <div class="main">
+      <div class="searchbar">
+        <input value="commission paritaire avancement agents" placeholder="Rechercher dans les documents traités…">
+        <div class="seg"><span class="on">Hybride</span><span>Sémantique</span><span>Lexical</span></div>
+        <button class="btn primary">Rechercher</button>
+      </div>
+      <div class="meta-row">
+        <span>4 résultats · 0,3 s</span>
+        <span>·</span>
+        <span>Top 10 pages</span>
+        <span style="margin-left:auto"><button class="btn">Indexer les nouveaux documents</button></span>
+      </div>
+      <div class="results">
+        <div class="hit sel">
+          <div class="score">0,89<small>score</small></div>
+          <div>
+            <div class="doc">ARRETE-N°-1684-MFP-DR-SDE-LR…pdf</div>
+            <div class="page">page 1 · décret · 2 pages</div>
+            <div class="excerpt">ARRÊTÉ N° 1684/MFP/DR/SDE/LR — Fixant la composition, les attributions et les modalités de fonctionnement de la <mark>commission paritaire</mark> d’avancement des agents de l’État…</div>
+          </div>
+        </div>
+        <div class="hit">
+          <div class="score">0,84<small>score</small></div>
+          <div>
+            <div class="doc">ARRETE-N°-1684-MFP-DR-SDE-LR…pdf</div>
+            <div class="page">page 2 · décret</div>
+            <div class="excerpt">— Quatre délégués du personnel contractuels de l’Administration concernée… Membres. 2°/— Les délégués du personnel dont les dossiers sont étudiés par la <mark>commission</mark>…</div>
+          </div>
+        </div>
+        <div class="hit">
+          <div class="score">0,61<small>score</small></div>
+          <div>
+            <div class="doc">arrete-00000200Minfi…Classification-Etablissements-Publics.pdf</div>
+            <div class="page">page 2 · arrêté · 3 pages</div>
+            <div class="excerpt">…les Etablissements Publics ci-après sont classés ainsi qu’il suit : a) Etablissements Publics de première catégorie…</div>
+          </div>
+        </div>
+        <div class="hit">
+          <div class="score">0,42<small>score</small></div>
+          <div>
+            <div class="doc">Cameroon Investment Incentives Law (2013).pdf</div>
+            <div class="page">page 4 · loi (EN)</div>
+            <div class="excerpt">SECTION 7.- (1) The investor may, during the operation phase… enjoy exemptions from or reductions of payment of the following taxes…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <header>Aperçu — page 1</header>
+      <div class="paper">
+        <h5>ARRÊTÉ N° 1684/MFP/DR/SDE/LR</h5>
+        <p>LE MINISTRE DE LA FONCTION PUBLIQUE,</p>
+        <p style="margin-top:6px">VU la Constitution du 02 juin 1972 ;</p>
+        <p>VU la loi n° 67/DF/6 du 12 juin 1967 portant Code du travail ;</p>
+        <p style="text-align:center;margin:8px 0;font-weight:700">ARRETE</p>
+        <p><b>ARTICLE 1er.</b>- Le présent arrêté qui porte application des dispositions de l’article 20 du décret n° 72/DF/110 du 28 février 1972 susvisé, fixe la composition, les attributions et les modalités de fonctionnement de la <mark>commission paritaire</mark> compétente en matière d’avancement des agents de l’État…</p>
+      </div>
+      <div class="actions">
+        <button class="btn primary">Ouvrir dans l’application</button>
+        <button class="btn">Comparer</button>
+      </div>
+    </div>
+  </div>
+  <div class="content" data-pane="similar" style="display:none">
+    <div class="main">
+      <div class="sim-head">
+        <span>Document courant :</span><b style="color:var(--text)">ARRETE-N°-1684-MFP-DR-SDE-LR.pdf</b>
+        <span style="margin-left:auto">Seuil</span>
+        <div class="slider" style="max-width:220px"><i style="width:62%"></i><b style="left:62%"></b></div>
+        <span style="color:var(--text)">0,75</span>
+        <button class="btn">Recalculer</button>
+      </div>
+      <div class="results">
+        <div class="pair">
+          <div class="line">
+            <span class="name">arrete-00000200Minfi…Classification-Etablissements-Publics.pdf</span>
+            <span class="badge">0,866</span>
+          </div>
+          <div class="pages">Pages proches : 1↔1 (0,893) · 2↔1 (0,856) · 1↔2 (0,850) · même thème : administration centrale</div>
+          <div class="acts"><button class="btn">Ouvrir A</button><button class="btn">Ouvrir B</button><button class="btn primary">Comparer côte à côte</button></div>
+        </div>
+        <div class="pair">
+          <div class="line">
+            <span class="name">ARRETE-N°-3277-MFP-DP…notation-des-agents-publics.pdf</span>
+            <span class="badge warn">0,812</span>
+          </div>
+          <div class="pages">Pages proches : 1↔1 (0,841) · 2↔2 (0,804) · même thème : fonction publique / notation</div>
+          <div class="acts"><button class="btn">Ouvrir A</button><button class="btn">Ouvrir B</button><button class="btn primary">Comparer côte à côte</button></div>
+        </div>
+        <div class="pair">
+          <div class="line">
+            <span class="name">ARRETE-56-1975…régime des pensions civiles.pdf</span>
+            <span class="badge warn">0,771</span>
+          </div>
+          <div class="pages">Pages proches : 2↔1 (0,792) · droits à la retraite, limite d’âge, fonctionnaires</div>
+          <div class="acts"><button class="btn">Ouvrir A</button><button class="btn">Ouvrir B</button><button class="btn primary">Comparer côte à côte</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <header>Comment le score est calculé</header>
+      <div class="paper" style="font-family:'Segoe UI',sans-serif;font-size:11.5px;color:var(--text);background:var(--panel2);line-height:1.6">
+        <p><b>Score document</b> = moyenne des <b>3 meilleures similarités page-à-page</b> (e5-base).</p>
+        <p style="margin-top:10px">≥ 0,95 : doublon probable (rouge).<br>0,75–0,95 : documents liés (orange).</p>
+        <p style="margin-top:10px">L’index se met à jour par MD5 : un document déjà traité n’est jamais ré-OCRisé.</p>
+        <p style="margin-top:10px;color:var(--muted)">Mode rapide HNSW disponible pour de grands corpus (top 25 pages par page).</p>
+      </div>
+      <div class="actions"><button class="btn" style="flex:1">Exporter les paires (CSV)</button></div>
+    </div>
+  </div>
+
+  <div class="content" data-pane="dupes" style="display:none">
+    <div class="main">
+      <div class="sim-head">
+        <span>Doublons stricts (score ≥ 0,95)</span>
+        <span style="margin-left:auto;color:var(--muted)">2 paires détectées</span>
+      </div>
+      <div class="results">
+        <div class="pair">
+          <div class="line">
+            <span class="name">Decret-n°-2013_159…finances-publiques (1).pdf</span>
+            <span class="badge">1,000</span>
+          </div>
+          <div class="line" style="margin-top:-4px">
+            <span class="name">Decret-n°-2013_159…(fb1dc1367f429a50b497eb473bb0d23e).pdf</span>
+            <span class="badge">identique</span>
+          </div>
+          <div class="pages">Même empreinte MD5 · 56 Ko · aucune action automatique : tu décides.</div>
+          <div class="acts"><button class="btn">Ouvrir A</button><button class="btn">Ouvrir B</button><button class="btn primary">Comparer</button></div>
+        </div>
+        <div class="pair">
+          <div class="line">
+            <span class="name">DECRET-Statut-general-fonction-publique.pdf</span>
+            <span class="badge">0,999</span>
+          </div>
+          <div class="line" style="margin-top:-4px">
+            <span class="name">DECRET-Statut-general-fonction-publique_1.pdf</span>
+            <span class="badge">quasi-identique</span>
+          </div>
+          <div class="pages">550 Ko chacun · contenu identique à 99,9 % · vérifier avant de supprimer.</div>
+          <div class="acts"><button class="btn">Ouvrir A</button><button class="btn">Ouvrir B</button><button class="btn primary">Comparer</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <header>Doublons — prudence</header>
+      <div class="paper" style="font-family:'Segoe UI',sans-serif;font-size:11.5px;color:var(--text);background:var(--panel2);line-height:1.6">
+        <p>AOCRI <b>ne supprime jamais</b> un fichier. « Marquer comme doublon » l’ajoute à une liste de quarantaine réversible.</p>
+        <p style="margin-top:10px">Les PDF sources ne sont pas modifiés ; seul l’index mémoire l’état.</p>
+        <p style="margin-top:10px;color:var(--muted)">Utile pour ton corpus Finance : plusieurs décrets y figurent en double (ex. statut général de la fonction publique).</p>
+      </div>
+      <div class="actions"><button class="btn" style="flex:1">Voir la liste de quarantaine</button></div>
+    </div>
+  </div>
+
+  <div class="note">Recherche 100 % locale (e5-base + BM25, fusion RRF) · clic sur un résultat = aperçu, <em>Ouvrir dans l’application</em> charge la page dans l’aperçu principal · index incrémental par MD5, aucun re-OCR.</div>
+</div>
+<script>
+  const tabs=[...document.querySelectorAll('.tab')];
+  const panes=[...document.querySelectorAll('[data-pane]')];
+  tabs.forEach(tab=>tab.addEventListener('click',()=>{
+    tabs.forEach(t=>t.classList.toggle('active',t===tab));
+    panes.forEach(p=>p.style.display=(p.dataset.pane===tab.dataset.tab)?'flex':'none');
+  }));
+</script>
+</body>
+</html>

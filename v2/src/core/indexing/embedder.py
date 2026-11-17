@@ -39,15 +39,26 @@ def default_model_dir() -> Path:
     env = os.environ.get("AOCRI_E5_MODEL_DIR")
     if env:
         return Path(env)
-    candidates = (
+    import sys
+
+    candidates = [
         _PROJECT_ROOT / "models" / "multilingual-e5-base",
         _PROJECT_ROOT / "models",
         _PROJECT_ROOT.parent / "app_pdf_pro" / "models",
-    )
+    ]
+    if getattr(sys, "frozen", False):
+        # Application empaquetée : modèle livré à côté de OCRApp.exe.
+        executable_dir = Path(sys.executable).resolve().parent
+        candidates = [
+            executable_dir / "models" / "multilingual-e5-base",
+            executable_dir / "models",
+            executable_dir / "models" / "e5",
+            *candidates,
+        ]
     for candidate in candidates:
         if any((candidate / name).is_file() for name in _MODEL_FILE_NAMES):
             return candidate
-    return candidates[-1]
+    return candidates[0]
 
 
 def normalise_prefix(prefix: str) -> str:

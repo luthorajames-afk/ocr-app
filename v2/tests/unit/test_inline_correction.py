@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QPixmap
 
 from core.gui.main_window import PreviewPanel
@@ -119,3 +119,49 @@ def test_mouse_wheel_zooms_under_cursor(qtbot, tmp_path) -> None:
     QApplication.sendEvent(panel.view.viewport(), event)
     assert panel.view.transform().m11() > before
     assert panel._user_zoomed is True
+
+
+def test_inline_correction_bubble_is_draggable(qtbot, tmp_path) -> None:
+    from PySide6.QtGui import QMouseEvent
+
+    work = make_work(tmp_path)
+    panel = PreviewPanel()
+    qtbot.addWidget(panel)
+    panel.resize(900, 700)
+    panel.show()
+    panel.show_page(task_for(work), 1)
+    panel.edit_btn.setChecked(True)
+    scale = 300 / 72.0
+    panel._on_preview_double_click(QPointF(100 * scale, 47 * scale))
+    widget = panel._inline_widget
+    handle = panel._inline_handle
+    assert widget is not None and handle is not None
+    before = widget.pos()
+    press = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(5, 5),
+        QPointF(500, 500),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    move = QMouseEvent(
+        QEvent.Type.MouseMove,
+        QPointF(5, 5),
+        QPointF(560, 540),
+        Qt.MouseButton.NoButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    release = QMouseEvent(
+        QEvent.Type.MouseButtonRelease,
+        QPointF(5, 5),
+        QPointF(560, 540),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    assert panel.eventFilter(handle, press) is True
+    assert panel.eventFilter(handle, move) is True
+    panel.eventFilter(handle, release)
+    assert widget.pos() != before

@@ -10,7 +10,7 @@ import json
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QPointF, QSettings, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QCloseEvent,
     QColor,
@@ -45,6 +45,7 @@ from core.gui import theme
 from core.gui.comparison_window import ComparisonWindow
 from core.gui.correction_dialog import CorrectionDialog
 from core.gui.outline_panel import OutlinePanel
+from core.gui.search_window import SearchWindow
 from core.gui.task_runner import Task, TaskRunner, TaskStatus
 from core.gui.worker_client import WorkerClient
 from core.metadata import APP_VERSION
@@ -273,6 +274,8 @@ class PreviewPanel(QWidget):
         self._inline_widget: QWidget | None = None
         self._inline_editor: QPlainTextEdit | None = None
         self._inline_index = -1
+        self._inline_handle: QLabel | None = None
+        self._inline_drag_offset: QPoint | None = None
         self._html = "<p style='color:#68707d'>Résultat en attente…</p>"
         self._detached: ComparisonWindow | None = None
         self._pinning = False
@@ -479,6 +482,14 @@ class PreviewPanel(QWidget):
             f" border: 1px solid {theme.BORDER}; border-radius: 4px; padding: 4px; }}"
             f" QLabel {{ color: {muted}; font-size: 10px; }}"
         )
+        handle = QLabel("✎ Correction — glisser pour déplacer", container)
+        handle.setObjectName("InlineHandle")
+        handle.setCursor(Qt.CursorShape.OpenHandCursor)
+        handle.setStyleSheet(
+            f"#InlineHandle {{ color: {theme.MUTED}; font-size: 10.5px;"
+            f" padding: 2px 4px; background: transparent; }}"
+        )
+        handle.installEventFilter(self)
         editor = QPlainTextEdit(text, container)
         editor.setTabChangesFocus(True)
         editor.installEventFilter(self)
@@ -493,7 +504,8 @@ class PreviewPanel(QWidget):
         buttons.addWidget(cancel)
         buttons.addStretch(1)
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(6, 4, 6, 6)
+        layout.addWidget(handle)
         layout.addWidget(editor, 1)
         layout.addWidget(hint)
         layout.addLayout(buttons)
@@ -508,6 +520,7 @@ class PreviewPanel(QWidget):
         container.raise_()
         self._inline_widget = container
         self._inline_editor = editor
+        self._inline_handle = handle
         self._inline_index = index
         editor.setFocus()
 
@@ -517,6 +530,8 @@ class PreviewPanel(QWidget):
             self._inline_widget.deleteLater()
             self._inline_widget = None
         self._inline_editor = None
+        self._inline_handle = None
+        self._inline_drag_offset = None
         self._inline_index = -1
 
     def _save_inline_editor(self) -> None:
@@ -567,6 +582,34 @@ class PreviewPanel(QWidget):
             raise
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if (
+            watched is self._inline_handle
+            and self._inline_widget is not None
+            and isinstance(event, QMouseEvent)
+        ):
+            if event.type() == QEvent.Type.MouseButtonPress:
+                if event.button() == Qt.MouseButton.LeftButton:
+                    self._inline_drag_offset = (
+                        event.globalPosition().toPoint() - self._inline_widget.pos()
+                    )
+                    self._inline_handle.setCursor(
+                        Qt.CursorShape.ClosedHandCursor
+                    )
+                    return True
+            elif (
+                event.type() == QEvent.Type.MouseMove
+                and self._inline_drag_offset is not None
+            ):
+                target = event.globalPosition().toPoint() - self._inline_drag_offset
+                self._inline_widget.move(target)
+                return True
+            elif event.type() == QEvent.Type.MouseButtonRelease:
+                self._inline_drag_offset = None
+                if self._inline_handle is not None:
+                    self._inline_handle.setCursor(
+                        Qt.CursorShape.OpenHandCursor
+                    )
+                return True
         if (
             watched is self._inline_editor
             and isinstance(event, QKeyEvent)
@@ -928,10 +971,14 @@ class MainWindow(QMainWindow):
         self.plan_btn.setCheckable(True)
         self.plan_btn.setChecked(False)
         self.plan_btn.clicked.connect(self._toggle_plan)
+        search_btn = QPushButton("Rechercher", bar)
+        search_btn.setToolTip("Rechercher dans les documents traités, voir les similaires")
+        search_btn.clicked.connect(self._open_search)
         layout.addWidget(self.sidebar_btn)
         layout.addWidget(group)
         layout.addWidget(add)
         layout.addWidget(self.plan_btn)
+        layout.addWidget(search_btn)
         layout.addWidget(self.results_btn)
         layout.addWidget(self.correct_btn)
         self.calibrate_btn = calibrate
@@ -1108,6 +1155,42 @@ class MainWindow(QMainWindow):
                 self._on_page_ready(task.id, task.pages_done)
             if self.outline.isVisible():
                 self._refresh_outline()
+
+    # ------------------------------------------------------------ recherche
+    def _open_search(self) -> None:
+        """Ouvre la fenêtre Recherche & documents similaires."""
+        window = getattr(self, "_search_window", None)
+        if window is None:
+            source = self._current_task.source_path if self._current_task else None
+            window = SearchWindow(current_source=source, parent=None)
+            window.open_requested.connect(self._open_search_hit)
+            self._search_window = window
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def _open_search_hit(self, source: str, page: int) -> None:
+        """Ouvre une page indexée dans l'aperçu principal."""
+        wanted = str(Path(source).resolve())
+        for task in self._runner.tasks():
+            if str(Path(task.source_path).resolve()) == wanted:
+                self._current_task = task
+                self.sidebar.select_task(task.id) if hasattr(self.sidebar, "select_task") else None
+                self._show_page(task, page)
+                return
+        from PySide6.QtWidgets import QMessageBox
+
+        answer = QMessageBox.question(
+            self,
+            "Document non chargé",
+            "Ce document n'est pas dans la liste des tâches. L'ajouter "
+            "(il sera retraité) ?",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.add_file(source)
+            self.bottom.label.setText(
+                f"Document ajouté ; la page {page} sera disponible après traitement"
+            )
 
     # ------------------------------------------------------------ actions
     def _toggle_pause(self) -> None:
