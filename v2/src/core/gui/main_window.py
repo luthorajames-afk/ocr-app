@@ -45,7 +45,8 @@ from core.gui import theme
 from core.gui.comparison_window import ComparisonWindow
 from core.gui.correction_dialog import CorrectionDialog
 from core.gui.outline_panel import OutlinePanel
-from core.gui.search_window import SearchWindow
+from core.gui.search_service import SearchService
+from core.gui.search_window import SearchWindow, _Job
 from core.gui.task_runner import Task, TaskRunner, TaskStatus
 from core.gui.worker_client import WorkerClient
 from core.metadata import APP_VERSION
@@ -872,6 +873,8 @@ class MainWindow(QMainWindow):
         self._edit_timer.timeout.connect(self._commit_edit)
         self._pending_edit: str | None = None
         self._improve_client: WorkerClient | None = None
+        self._search_service = SearchService()
+        self._auto_indexed = False
 
         self._modes: dict[str, QPushButton] = {}
         self._toolbar = self._build_toolbar()
@@ -924,6 +927,7 @@ class MainWindow(QMainWindow):
         self.results.text_edited.connect(self._on_text_edited)
         self._runner.all_done.connect(self._on_all_done)
         QTimer.singleShot(0, self._update_buttons)
+        QTimer.singleShot(4000, self._auto_index)
 
     # ------------------------------------------------------------------ UI
     def _build_toolbar(self) -> QWidget:
@@ -1136,6 +1140,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title + " ●")
 
     def _on_all_done(self) -> None:
+        self._auto_indexed = False
+        QTimer.singleShot(2000, self._auto_index)
         # Enchaînement des tâches en attente (ajout multi-fichiers) : différé
         # pour laisser le processus précédent se terminer proprement.
         QTimer.singleShot(150, self._start_next_pending)
@@ -1162,7 +1168,9 @@ class MainWindow(QMainWindow):
         window = getattr(self, "_search_window", None)
         if window is None:
             source = self._current_task.source_path if self._current_task else None
-            window = SearchWindow(current_source=source, parent=None)
+            window = SearchWindow(
+                service=self._search_service, current_source=source, parent=None
+            )
             window.open_requested.connect(self._open_search_hit)
             self._search_window = window
         window.show()
@@ -1190,6 +1198,29 @@ class MainWindow(QMainWindow):
             self.add_file(source)
             self.bottom.label.setText(
                 f"Document ajouté ; la page {page} sera disponible après traitement"
+            )
+
+    def _auto_index(self) -> None:
+        """Indexe en arrière-plan les nouveaux documents traités (une fois)."""
+        if self._auto_indexed:
+            return
+        self._auto_indexed = True
+        job = _Job(lambda: self._search_service.index_new())
+        job.done.connect(self._on_auto_index_done)
+        job.failed.connect(
+            lambda _message: self.bottom.label.setText(
+                "Index de recherche indisponible (modèle e5 absent ?)"
+            )
+        )
+        job.finished.connect(job.deleteLater)
+        job.start()
+
+    def _on_auto_index_done(self, report: object) -> None:
+        from core.indexing.search import IndexReport
+
+        if isinstance(report, IndexReport) and report.indexed:
+            self.bottom.label.setText(
+                f"Recherche : {len(report.indexed)} document(s) indexé(s) en arrière-plan"
             )
 
     # ------------------------------------------------------------ actions

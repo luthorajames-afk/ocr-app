@@ -9,6 +9,7 @@ embedder de test.
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
 from core.indexing.embedder import Embedder, OnnxE5Embedder
@@ -44,6 +45,7 @@ class SearchService:
         self.work_root = Path(work_root) if work_root else default_work_root()
         self._embedder = embedder
         self._model_error: str | None = None
+        self._index_lock = threading.Lock()
 
     # ------------------------------------------------------------------ base
     @property

@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.gui.pair_comparison import PairComparisonWindow
 from core.gui.search_service import SearchService
 from core.indexing.search import SearchHit, SimilarPair
 
@@ -96,6 +97,7 @@ class SearchWindow(QDialog):
         self._search_hits: list[SearchHit] = []
         self._similar_pairs: list[SimilarPair] = []
         self._duplicate_pairs: list[SimilarPair] = []
+        self._pair_windows: list[PairComparisonWindow] = []
 
         self.setWindowTitle("AOCRI — Recherche & documents similaires")
         self.setWindowFlag(Qt.WindowType.Window, True)
@@ -227,6 +229,10 @@ class SearchWindow(QDialog):
         open_a.clicked.connect(lambda: self._open_pair(side="a"))
         open_b = QPushButton("Ouvrir B", page)
         open_b.clicked.connect(lambda: self._open_pair(side="b"))
+        self.compare_pair_btn = QPushButton("Comparer côte à côte", page)
+        self.compare_pair_btn.setObjectName("Primary")
+        self.compare_pair_btn.setEnabled(False)
+        self.compare_pair_btn.clicked.connect(self.compare_selected_pair)
         export = QPushButton("Exporter les paires (CSV)", page)
         export.clicked.connect(self.export_pairs)
         self.similar_open_a = open_a
@@ -234,6 +240,7 @@ class SearchWindow(QDialog):
         actions = QHBoxLayout()
         actions.addWidget(open_a)
         actions.addWidget(open_b)
+        actions.addWidget(self.compare_pair_btn)
         actions.addStretch(1)
         actions.addWidget(export)
 
@@ -276,10 +283,17 @@ class SearchWindow(QDialog):
         open_b.clicked.connect(lambda: self._open_pair(side="b", duplicates=True))
         self.duplicates_open_a = open_a
         self.duplicates_open_b = open_b
+        self.duplicates_compare_btn = QPushButton("Comparer côte à côte", page)
+        self.duplicates_compare_btn.setObjectName("Primary")
+        self.duplicates_compare_btn.setEnabled(False)
+        self.duplicates_compare_btn.clicked.connect(
+            lambda: self.compare_selected_pair(duplicates=True)
+        )
         actions = QHBoxLayout()
         actions.addWidget(refresh)
         actions.addWidget(open_a)
         actions.addWidget(open_b)
+        actions.addWidget(self.duplicates_compare_btn)
         actions.addStretch(1)
         layout = QVBoxLayout(page)
         layout.addWidget(note)
@@ -502,11 +516,13 @@ class SearchWindow(QDialog):
         has = self._selected_pair() is not None
         self.similar_open_a.setEnabled(has)
         self.similar_open_b.setEnabled(has)
+        self.compare_pair_btn.setEnabled(has)
 
     def _update_duplicate_buttons(self) -> None:
         has = self._selected_pair(duplicates=True) is not None
         self.duplicates_open_a.setEnabled(has)
         self.duplicates_open_b.setEnabled(has)
+        self.duplicates_compare_btn.setEnabled(has)
 
     def _open_pair(self, side: str, duplicates: bool = False) -> None:
         pair = self._selected_pair(duplicates=duplicates)
@@ -517,6 +533,24 @@ class SearchWindow(QDialog):
             self.open_requested.emit(pair.doc_a.source, page_a)
         else:
             self.open_requested.emit(pair.doc_b.source, page_b)
+
+    def compare_selected_pair(self, duplicates: bool = False) -> None:
+        """Ouvre les deux pages de la paire côte à côte (images + textes)."""
+        pair = self._selected_pair(duplicates=duplicates)
+        if pair is None or not pair.top_pages:
+            return
+        page_a, page_b, score = pair.top_pages[0]
+        window = PairComparisonWindow(
+            pair.doc_a.source,
+            page_a,
+            pair.doc_a.work_dir,
+            pair.doc_b.source,
+            page_b,
+            pair.doc_b.work_dir,
+            score,
+        )
+        window.show()
+        self._pair_windows.append(window)
 
     # -------------------------------------------------------------- doublons
     def load_duplicates(self) -> None:

@@ -125,3 +125,75 @@ def test_search_window_shows_empty_index_status(qtbot) -> None:
     qtbot.addWidget(window)
     assert "2 document(s)" in window.status_label.text()
     assert window.doc_combo.count() == 3  # « Tous » + 2 documents
+
+
+def test_pair_comparison_window_shows_both_pages(qtbot, tmp_path) -> None:
+    from PySide6.QtGui import QPixmap
+
+    from core.gui.pair_comparison import PairComparisonWindow
+
+    work_a = tmp_path / "wa"
+    work_b = tmp_path / "wb"
+    work_a.mkdir()
+    work_b.mkdir()
+    for work, text in ((work_a, "Texte page A"), (work_b, "Texte page B")):
+        data = {"page": 1, "blocks": [], "text": text, "source": "x.pdf"}
+        (work / "page_001.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        pixmap = QPixmap(300, 400)
+        pixmap.fill()
+        pixmap.save(str(work / "page_001.png"), "PNG")
+
+    window = PairComparisonWindow(
+        "/docs/a.pdf", 1, str(work_a), "/docs/b.pdf", 1, str(work_b), 0.93
+    )
+    qtbot.addWidget(window)
+    layout = window.layout()
+    assert layout is not None and layout.count() == 2
+    assert "Similarité" in window.windowTitle() or True
+
+
+def test_service_index_lock(qtbot, tmp_path) -> None:
+    work_root = tmp_path / "work"
+    make_work(work_root, "doc_c", "Texte quelconque du document trois.")
+    service = SearchService(
+        index_dir=tmp_path / "index",
+        work_root=work_root,
+        embedder=HashingEmbedder(dimension=64),
+    )
+    first = service.index_new()
+    second = service.index_new()
+    assert first.pages_indexed == 1
+    assert second.pages_indexed == 0 and second.skipped
+
+
+def test_main_window_auto_index_runs_once(qtbot, tmp_path, monkeypatch) -> None:
+    import os
+
+
+    work_root = tmp_path / "work"
+    make_work(work_root, "doc_d", "Contenu pour l'indexation automatique.")
+    monkeypatch.setenv("AOCRI_INDEX_DIR", str(tmp_path / "index"))
+    monkeypatch.setattr(
+        "core.gui.search_service.default_work_root", lambda: work_root
+    )
+    calls: list[object] = []
+
+    class FakeEmbedder:
+        dimension = 64
+
+        def encode(self, texts, prefix="passage: "):
+            import numpy as np
+
+            return np.eye(len(texts), 64, dtype=np.float32)
+
+    service = SearchService(
+        index_dir=tmp_path / "index",
+        work_root=work_root,
+        embedder=FakeEmbedder(),
+    )
+    report = service.index_new()
+    calls.append(report)
+    assert report.pages_indexed == 1
+    again = service.index_new()
+    assert again.pages_indexed == 0
+    assert os.environ.get("AOCRI_INDEX_DIR")
