@@ -171,6 +171,7 @@ class PreviewPanel(QWidget):
     """Aperçu : navigation pages, zoom, comparaison inline ou détachée."""
 
     page_requested = Signal(int)
+    page_corrected = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -221,6 +222,7 @@ class PreviewPanel(QWidget):
         self.compare_btn.toggled.connect(self.compare.setVisible)
         self._page = 1
         self._total = 1
+        self._task: Task | None = None
         self._flash_item: QGraphicsRectItem | None = None
         self._html = "<p style='color:#68707d'>Résultat en attente…</p>"
         self._detached: ComparisonWindow | None = None
@@ -294,8 +296,11 @@ class PreviewPanel(QWidget):
             self.scene.addRect(0, 0, 430, 608, brush=Qt.GlobalColor.white)
             self.scene.addText((text or "[page en cours]")[:1500])
             self.fit_page()
+        self._task = task
         self.title.setText(Path(task.source_path).name)
         self.info.setText(f"{task.total_pages or '?'} page(s)")
+        if self._detached is not None:
+            self._detached.set_page(Path(task.work_dir), page_number)
 
     # --------------------------------------------------------------- zoom
     def zoom_in(self) -> None:
@@ -314,7 +319,10 @@ class PreviewPanel(QWidget):
         if self._detached is None:
             window = ComparisonWindow(None)  # fenêtre autonome (multi-écrans)
             window.finished.connect(lambda _code: self._on_detached_closed())
+            window.blocks_saved.connect(self.page_corrected.emit)
             window.set_html(self._html)
+            if self._task is not None:
+                window.set_page(Path(self._task.work_dir), self._page)
             window.show()
             self._detached = window
             # Le preview original occupe tout l'espace laissé vacant.
@@ -580,6 +588,7 @@ class MainWindow(QMainWindow):
         self.sidebar.list.itemClicked.connect(self._on_task_clicked)
 
         self.preview.page_requested.connect(self._on_page_requested)
+        self.preview.page_corrected.connect(self._on_page_corrected)
         self._runner.task_changed.connect(self._on_task_changed)
         self._runner.page_ready.connect(self._on_page_ready)
         self.results.text_edited.connect(self._on_text_edited)
@@ -751,6 +760,18 @@ class MainWindow(QMainWindow):
             self._show_page(task, page)
         else:
             self.bottom.label.setText(f"Page {page} non encore traitée")
+
+    def _on_page_corrected(self) -> None:
+        """Corrections enregistrées depuis la fenêtre de comparaison."""
+        task = self._current_task
+        if task is None or not self._active_page:
+            return
+        self._show_page(task, self._active_page)
+        if self.outline.isVisible():
+            self.outline.set_current_page(self._active_page)
+        self.bottom.label.setText(
+            f"Corrections enregistrées — page {self._active_page}"
+        )
 
     def _on_text_edited(self, text: str) -> None:
         """R9 — édition avant copie : sauvegarde débouncée de la page active."""
