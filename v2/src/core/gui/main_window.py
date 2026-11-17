@@ -10,8 +10,8 @@ import json
 from html import escape
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QColor, QPen, QPixmap
+from PySide6.QtCore import QEvent, QObject, QPointF, QSettings, Qt, QTimer, Signal
+from PySide6.QtGui import QCloseEvent, QColor, QKeyEvent, QMouseEvent, QPen, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -167,8 +167,18 @@ class TaskSidebar(QWidget):
         self._widgets[task.id] = widget
 
 
+class PreviewView(QGraphicsView):
+    """Vue de l'aperçu : double-clic converti en coordonnées de scène."""
+
+    double_clicked = Signal(QPointF)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        self.double_clicked.emit(self.mapToScene(event.position().toPoint()))
+        super().mouseDoubleClickEvent(event)
+
+
 class PreviewPanel(QWidget):
-    """Aperçu : navigation pages, zoom, comparaison inline ou détachée."""
+    """Aperçu : navigation, zoom, comparaison et correction sur la page."""
 
     page_requested = Signal(int)
     page_corrected = Signal()
@@ -176,9 +186,10 @@ class PreviewPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.scene = QGraphicsScene(self)
-        self.view = QGraphicsView(self.scene, self)
+        self.view = PreviewView(self.scene, self)
         self.view.setObjectName("Preview")
         self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.view.double_clicked.connect(self._on_preview_double_click)
         self.title = QLabel("Aucun document")
         self.title.setObjectName("Title")
         self.info = QLabel("")
@@ -190,6 +201,12 @@ class PreviewPanel(QWidget):
         self.fit_btn = QPushButton("Ajuster", self)
         self.compare_btn = QPushButton("Comparer", self)
         self.detach_btn = QPushButton("Détacher", self)
+        self.edit_btn = QPushButton("✎ Corriger", self)
+        self.edit_btn.setCheckable(True)
+        self.edit_btn.setToolTip(
+            "Corriger l'OCR sur la page : double-clic sur un bloc, Ctrl+Entrée pour enregistrer"
+        )
+        self.edit_btn.toggled.connect(self._set_edit_mode)
         for button in (self.prev_btn, self.next_btn, self.zoom_out_btn, self.zoom_in_btn):
             button.setFixedWidth(30)
         self.page_label = QLabel("", self)
@@ -206,6 +223,7 @@ class PreviewPanel(QWidget):
         head.addWidget(self.zoom_in_btn)
         head.addWidget(self.fit_btn)
         head.addSpacing(10)
+        head.addWidget(self.edit_btn)
         head.addWidget(self.compare_btn)
         head.addWidget(self.detach_btn)
         self.compare = QTextBrowser(self)
@@ -222,8 +240,15 @@ class PreviewPanel(QWidget):
         self.compare_btn.toggled.connect(self.compare.setVisible)
         self._page = 1
         self._total = 1
+        self._dpi = 300
         self._task: Task | None = None
         self._flash_item: QGraphicsRectItem | None = None
+        self._blocks: list[dict[str, object]] = []
+        self._page_path: Path | None = None
+        self._overlay_items: list[QGraphicsRectItem] = []
+        self._inline_widget: QWidget | None = None
+        self._inline_editor: QPlainTextEdit | None = None
+        self._inline_index = -1
         self._html = "<p style='color:#68707d'>Résultat en attente…</p>"
         self._detached: ComparisonWindow | None = None
         self._pinning = False
@@ -271,10 +296,13 @@ class PreviewPanel(QWidget):
         self._flash_item = None
 
     def show_page(self, task: Task, page_number: int) -> None:
+        self._close_inline_editor()
         self.scene.clear()
         self._flash_item = None
+        self._overlay_items = []
         self._page = page_number
         self._total = max(1, task.total_pages or 1)
+        self._dpi = max(72, int(task.dpi or 300))
         self.page_label.setText(f"page {self._page} / {self._total}")
         self.prev_btn.setEnabled(self._page > 1)
         self.next_btn.setEnabled(self._page < self._total)
@@ -299,8 +327,225 @@ class PreviewPanel(QWidget):
         self._task = task
         self.title.setText(Path(task.source_path).name)
         self.info.setText(f"{task.total_pages or '?'} page(s)")
+        self._load_page_blocks(task, page_number)
+        self._draw_block_overlays()
         if self._detached is not None:
             self._detached.set_page(Path(task.work_dir), page_number)
+
+    # -------------------------------------------------- correction sur la page
+    def _load_page_blocks(self, task: Task, page_number: int) -> None:
+        """Charge les blocs de la page pour la correction directe."""
+        self._blocks = []
+        self._page_path = Path(task.work_dir) / f"page_{page_number:03d}.json"
+        if not self._page_path.is_file():
+            return
+        try:
+            record = json.loads(self._page_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        blocks = record.get("blocks")
+        if isinstance(blocks, list):
+            self._blocks = [block for block in blocks if isinstance(block, dict)]
+
+    def _draw_block_overlays(self) -> None:
+        """Surligne les blocs corrigeables quand le mode correction est actif."""
+        self._clear_overlays()
+        if not self.edit_btn.isChecked() or not self._blocks:
+            return
+        scale = self._dpi / 72.0
+        pen = QPen(QColor(125, 152, 255, 170), 1.4, Qt.PenStyle.DashLine)
+        for block in self._blocks:
+            if str(block.get("kind", "line")) == "table":
+                continue
+            text = str(block.get("text", "")).strip()
+            if not text:
+                continue
+            bbox = block.get("bbox")
+            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+                continue
+            try:
+                x0, y0, x1, y1 = (float(value) for value in bbox)
+            except (TypeError, ValueError):
+                continue
+            item = QGraphicsRectItem(
+                x0 * scale, y0 * scale, (x1 - x0) * scale, (y1 - y0) * scale
+            )
+            item.setPen(pen)
+            item.setBrush(QColor(125, 152, 255, 22))
+            item.setToolTip("Double-clic pour corriger ce bloc")
+            self.scene.addItem(item)
+            self._overlay_items.append(item)
+
+    def _clear_overlays(self) -> None:
+        for item in self._overlay_items:
+            self.scene.removeItem(item)
+        self._overlay_items = []
+
+    def _set_edit_mode(self, enabled: bool) -> None:
+        """Active/désactive les surcouches de correction de l'aperçu."""
+        self._close_inline_editor()
+        self.view.setCursor(
+            Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor
+        )
+        self._draw_block_overlays()
+        if enabled:
+            self.info.setText("double-clic sur un bloc pour corriger")
+        else:
+            task = self._task
+            self.info.setText(f"{task.total_pages or '?'} page(s)" if task else "")
+
+    def _on_preview_double_click(self, position: QPointF) -> None:
+        if not self.edit_btn.isChecked() or not self._blocks:
+            return
+        scale = self._dpi / 72.0
+        point = (position.x() / scale, position.y() / scale)
+        index = self._block_at(point)
+        if index >= 0:
+            self._open_inline_editor(index)
+
+    def _block_at(self, point: tuple[float, float]) -> int:
+        """Index du dernier bloc contenant le point (points page)."""
+        x, y = point
+        for index in range(len(self._blocks) - 1, -1, -1):
+            block = self._blocks[index]
+            if str(block.get("kind", "line")) == "table":
+                continue
+            bbox = block.get("bbox")
+            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+                continue
+            try:
+                x0, y0, x1, y1 = (float(value) for value in bbox)
+            except (TypeError, ValueError):
+                continue
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return index
+        return -1
+
+    def _open_inline_editor(self, index: int) -> None:
+        """Éditeur intégré à la page, positionné sur le bloc double-cliqué."""
+        self._close_inline_editor()
+        block = self._blocks[index]
+        bbox = block.get("bbox")
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            return
+        try:
+            x0, y0, x1, y1 = (float(value) for value in bbox)
+        except (TypeError, ValueError):
+            return
+        scale = self._dpi / 72.0
+        text = str(block.get("text", ""))
+        container = QWidget()
+        container.setObjectName("InlineCorrector")
+        muted = theme.PANEL_2
+        container.setStyleSheet(
+            f"#InlineCorrector {{ background: {theme.PANEL};"
+            f" border: 1.5px solid {theme.ACCENT}; border-radius: 6px; }}"
+            f" QPlainTextEdit {{ background: {theme.PANEL_2}; color: {theme.TEXT};"
+            f" border: 1px solid {theme.BORDER}; border-radius: 4px; padding: 4px; }}"
+            f" QLabel {{ color: {muted}; font-size: 10px; }}"
+        )
+        editor = QPlainTextEdit(text, container)
+        editor.setTabChangesFocus(True)
+        editor.installEventFilter(self)
+        hint = QLabel("Ctrl+Entrée : enregistrer · Échap : annuler", container)
+        save = QPushButton("Enregistrer", container)
+        save.setObjectName("Primary")
+        cancel = QPushButton("Annuler", container)
+        save.clicked.connect(lambda: self._save_inline_editor())
+        cancel.clicked.connect(self._close_inline_editor)
+        buttons = QHBoxLayout()
+        buttons.addWidget(save)
+        buttons.addWidget(cancel)
+        buttons.addStretch(1)
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.addWidget(editor, 1)
+        layout.addWidget(hint)
+        layout.addLayout(buttons)
+        zoom = max(0.1, self.view.transform().m11())
+        width = max(280.0, min(680.0, (x1 - x0) * scale * zoom + 24.0))
+        height = max(120.0, min(300.0, (y1 - y0) * scale * zoom + 96.0))
+        container.resize(int(width), int(height))
+        container.setParent(self.view.viewport())
+        top_left = self.view.mapFromScene(QPointF(x0 * scale, y0 * scale))
+        container.move(top_left)
+        container.show()
+        container.raise_()
+        self._inline_widget = container
+        self._inline_editor = editor
+        self._inline_index = index
+        editor.setFocus()
+
+    def _close_inline_editor(self) -> None:
+        if self._inline_widget is not None:
+            self._inline_widget.hide()
+            self._inline_widget.deleteLater()
+            self._inline_widget = None
+        self._inline_editor = None
+        self._inline_index = -1
+
+    def _save_inline_editor(self) -> None:
+        """Écrit le bloc corrigé dans page_NNN.json (ordre de lecture préservé)."""
+        if self._inline_editor is None or self._page_path is None or self._inline_index < 0:
+            return
+        text = self._inline_editor.toPlainText().strip()
+        try:
+            data = json.loads(self._page_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            self._close_inline_editor()
+            return
+        blocks = data.get("blocks")
+        if not isinstance(blocks, list) or self._inline_index >= len(blocks):
+            self._close_inline_editor()
+            return
+        block = blocks[self._inline_index]
+        if not isinstance(block, dict):
+            self._close_inline_editor()
+            return
+        if text and text != str(block.get("text", "")):
+            block["text"] = text
+            data["text"] = chr(10).join(
+                str(item.get("text", ""))
+                for item in blocks
+                if isinstance(item, dict) and str(item.get("text", "")).strip()
+            )
+            self._atomic_write_json(self._page_path, data)
+            self._blocks = [item for item in blocks if isinstance(item, dict)]
+        self._close_inline_editor()
+        self._draw_block_overlays()
+        self.page_corrected.emit()
+
+    @staticmethod
+    def _atomic_write_json(path: Path, data: dict[str, object]) -> None:
+        import os
+        import tempfile
+
+        fd, temp_name = tempfile.mkstemp(
+            prefix=f".{path.stem}.", suffix=".tmp", dir=str(path.parent)
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+            os.replace(temp_name, path)
+        except BaseException:
+            Path(temp_name).unlink(missing_ok=True)
+            raise
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if (
+            watched is self._inline_editor
+            and isinstance(event, QKeyEvent)
+            and event.type() == QEvent.Type.KeyPress
+        ):
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and (
+                event.modifiers() & Qt.KeyboardModifier.ControlModifier
+            ):
+                self._save_inline_editor()
+                return True
+            if event.key() == Qt.Key.Key_Escape:
+                self._close_inline_editor()
+                return True
+        return super().eventFilter(watched, event)
 
     # --------------------------------------------------------------- zoom
     def zoom_in(self) -> None:
