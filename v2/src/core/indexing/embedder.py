@@ -164,9 +164,15 @@ class OnnxE5Embedder:
 
         model_path = self._find_model_file()
         logger.info("Chargement du modèle ONNX : %s", model_path)
-        self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
-            str(self.model_dir)
-        )
+        try:
+            # Corrige le motif regex du tokenizer e5 (warning transformers).
+            self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
+                str(self.model_dir), fix_mistral_regex=True
+            )
+        except TypeError:  # pragma: no cover — ancienne version de transformers
+            self.tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
+                str(self.model_dir)
+            )
 
         providers, self.device = self._select_providers()
         options = ort.SessionOptions()
