@@ -127,6 +127,7 @@ class Worker:
         languages: str = "fra+eng",
         page: int | None = None,
         best_variant: bool = False,
+        fuzzy_lexicon: bool = False,
         engine: OcrEngine | None = None,
     ) -> None:
         self.input_path = input_path
@@ -141,6 +142,7 @@ class Worker:
         self.lexicon_language = _lexicon_language(self.languages)
         self.page = page
         self.best_variant = best_variant
+        self.fuzzy_lexicon = fuzzy_lexicon
         self._engine = engine
         self._pause = threading.Event()
         self._cancel = threading.Event()
@@ -229,7 +231,14 @@ class Worker:
                             for block in page.blocks
                         ]
                         if self.lexicon:
-                            _correct_blocks(blocks, self.lexicon_language)
+                            # Flou opt-in : sur du texte natif correct, il peut
+                            # inventer (omissions→commission) ; artefacts seuls
+                            # par défaut.
+                            _correct_blocks(
+                                blocks,
+                                self.lexicon_language,
+                                fuzzy=self.fuzzy_lexicon,
+                            )
                         # Texte dans l'ordre de lecture des colonnes (pas l'ordre
                         # brut de la couche PDF, souvent ligne par ligne).
                         text = chr(10).join(
@@ -401,6 +410,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.set_defaults(lexicon=True)
     parser.add_argument("--no-resume", action="store_true", help="ignorer les pages déjà sauvegardées")
+    parser.add_argument(
+        "--fuzzy-lexicon",
+        action="store_true",
+        help="activer la correction floue du lexique (désactivée par défaut)",
+    )
     args = parser.parse_args(argv)
 
     input_path = Path(args.input)
@@ -425,6 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         languages=args.lang,
         page=args.page,
         best_variant=args.best_variant,
+        fuzzy_lexicon=args.fuzzy_lexicon,
         engine=engine,
     )
 

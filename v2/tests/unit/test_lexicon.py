@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from core.pipeline.lexicon import DEFAULT_LEXICON, correct_text
+from core.pipeline.lexicon import (
+    DEFAULT_LEXICON,
+    ENGLISH_LEGAL_TERMS,
+    ENGLISH_LEXICON,
+    correct_text,
+)
 
 
 def test_corrects_near_miss_legal_word() -> None:
@@ -76,8 +81,6 @@ def test_short_tokens_are_untouched() -> None:
 
 
 def test_finance_ocr_artifacts_are_repaired() -> None:
-    from core.pipeline.lexicon import correct_text
-
     cases = {
         "RBFUBLIQUE UNIE DU CAMERCI": "RÉPUBLIQUE UNIE DU CAMEROUN",
         "le nowore de prolongations": "le nombre de prolongations",
@@ -92,23 +95,32 @@ def test_finance_ocr_artifacts_are_repaired() -> None:
 
 
 def test_finance_lexicon_does_not_touch_references() -> None:
-    from core.pipeline.lexicon import correct_text
-
     report = correct_text("exercice 2022, article 7, 1 431 018 100 FCFA", language="fr")
     assert "2022" in report.text
     assert "1 431 018 100" in report.text
 
 
 def test_fuzzy_correction_can_be_disabled_for_noisy_ocr() -> None:
-    from core.pipeline.lexicon import correct_text
-
     report = correct_text("contact taux reception", language="fr", fuzzy=False)
     assert report.text == "contact taux reception"
     assert report.count == 0
 
 
 def test_artifact_fixes_still_apply_without_fuzzy() -> None:
-    from core.pipeline.lexicon import correct_text
-
     report = correct_text("RBFUBLIQUE UNIE DU CAMERCI", language="fr", fuzzy=False)
     assert report.text == "RÉPUBLIQUE UNIE DU CAMEROUN"
+
+
+def test_english_legal_lexicon_is_expanded() -> None:
+    assert "agreement" in ENGLISH_LEGAL_TERMS
+    assert "appropriation" in ENGLISH_LEXICON or "expenditure" in ENGLISH_LEXICON
+    report = correct_text("the governrnent and the parliarnent", language="en")
+    assert report.text == "the government and the parliament"
+
+
+def test_english_native_text_is_not_overcorrected_without_fuzzy() -> None:
+    report = correct_text(
+        "The report mentions omissions and commissions.", language="en", fuzzy=False
+    )
+    assert report.text == "The report mentions omissions and commissions."
+    assert report.count == 0

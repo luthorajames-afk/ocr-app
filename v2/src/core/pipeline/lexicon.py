@@ -157,7 +157,60 @@ COMMON_FRENCH: tuple[str, ...] = (
     "mandataire", "mandataires", "mandat", "mandats", "trimestre",
 )
 
-BILINGUAL_LEXICON: tuple[str, ...] = DEFAULT_LEXICON + ENGLISH_LEXICON + COMMON_FRENCH
+# Vocabulaire juridique/administratif anglais extrait du corpus Library
+# (lois camerounaises EN, accords OMC, décrets) — 117 documents analysés.
+ENGLISH_LEGAL_TERMS: tuple[str, ...] = (
+    "republic", "decree", "decrees", "cameroon", "president", "public",
+    "section", "hereby", "service", "services", "national", "government",
+    "provisions", "agreement", "trade", "development", "december", "general",
+    "officer", "regulations", "official", "members", "follows", "financial",
+    "registered", "according", "constitution", "state", "procedure", "french",
+    "published", "july", "association", "urgency", "english", "amended",
+    "gazette", "inserted", "rules", "fatherland", "supplemented", "minister",
+    "cultural", "yaounde", "finance", "research", "adopted", "ministry",
+    "relating", "products", "april", "regional", "signed", "conditions",
+    "administrative", "activity", "salary", "march", "duties", "mining",
+    "charge", "loan", "following", "organize", "peace", "council",
+    "activities", "board", "artistic", "member", "ratify", "agency",
+    "authority", "associations", "country", "personnel", "authorize", "year",
+    "technical", "amount", "legal", "project", "presidence", "parliament",
+    "union", "june", "million", "referred", "enacts", "office", "economy",
+    "production", "sector", "forest", "provided", "date", "governing",
+    "authorized", "period", "local", "planning", "system", "subject",
+    "region", "approximately", "information", "force", "policy", "january",
+    "product", "effect", "management", "deliberated", "representative",
+    "senior", "private", "administration", "natural", "sign", "cfaf",
+    "economic", "authorities", "code", "division", "billion", "customs",
+    "particular", "international", "enterprises", "consular", "transport",
+    "documents", "apply", "person", "chapter", "assistant", "orders",
+    "purpose", "applicable", "implementation", "contract", "investment",
+    "replacement", "domestic", "goods", "resources", "directors", "visa",
+    "bank", "approval", "application", "foreign", "imports", "special",
+    "signature", "credit", "divisional", "accordance", "ensure", "civil",
+    "appointed", "head", "organization", "rural", "cnsc", "order", "costs",
+    "required", "practice", "appoint", "review", "governed", "export",
+    "electrification", "powers", "previously", "financing", "ratified",
+    "concerned", "value", "price", "labour", "security", "contracts",
+    "transferred", "constitutional", "functioning", "paragraph", "report",
+    "degree", "rate", "protection", "form", "companies", "convention",
+    "including", "term", "military", "engaged", "territorial", "wildlife",
+    "family", "archives", "case", "implementing", "commercial", "unions",
+    "corporations", "supervisory", "cooperation", "safety", "necessary",
+    "unit", "respect", "measures", "corporation", "territory", "instruments",
+    "medical", "framework", "index", "african", "culture", "practices",
+    "years", "gatt", "increase", "material", "related", "business",
+    "persons", "areas", "water", "requirements", "degrees", "property",
+    "federation", "electoral", "document", "secretariat", "appropriate",
+    "purposes", "staff", "right", "issued", "responsible", "definitions",
+    "land", "prime", "establishments", "holders", "passports", "granted",
+    "budget", "impact", "relevant", "environment", "basic", "provide",
+    "market", "taxes", "process", "november", "remuneration", "laws",
+    "social", "facilities", "presidency", "delegation", "exemption", "area",
+)
+
+BILINGUAL_LEXICON: tuple[str, ...] = (
+    DEFAULT_LEXICON + ENGLISH_LEXICON + ENGLISH_LEGAL_TERMS + COMMON_FRENCH
+)
 
 
 # Confusions OCR / couche texte fréquentes (mots entiers, minuscules).
@@ -193,6 +246,21 @@ ARTIFACT_FIXES_EN: dict[str, str] = {
     "financiai": "financial",
     "sectionn": "section",
     "articie": "article",
+    "agreernent": "agreement",
+    "cornmittee": "committee",
+    "governrnent": "government",
+    "parliarnent": "parliament",
+    "departrnent": "department",
+    "docurnent": "document",
+    "payrnent": "payment",
+    "staturnent": "statement",
+    "natlonal": "national",
+    "flnanclal": "financial",
+    "sectlon": "section",
+    "provlslons": "provisions",
+    "regulatrons": "regulations",
+    "admlnlstratlon": "administration",
+    "publlcatlon": "publication",
 }
 
 

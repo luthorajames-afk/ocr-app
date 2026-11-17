@@ -106,3 +106,17 @@ def test_build_outline_lists_titles_and_articles() -> None:
     roles = [entry.role for entry in outline]
     assert roles == [ROLE_DISPOSITIF, ROLE_TITRE, ROLE_ARTICLE, ROLE_ARTICLE]
     assert outline[0].page == 1 and outline[-1].page == 2
+
+
+def test_english_judgment_structure() -> None:
+    assert classify("ARTICLE I") == ROLE_ARTICLE
+    assert classify("ARTICLE IV") == ROLE_ARTICLE
+    assert classify("WHEREAS the Parties have agreed as follows:") == ROLE_CONSIDERANT
+    assert classify("NOW, THEREFORE, the Parties hereby agree:") == ROLE_DISPOSITIF
+    assert classify("IT IS HEREBY ORDERED that the application is dismissed") == ROLE_DISPOSITIF
+    assert classify("HAVE AGREED as follows:") == ROLE_DISPOSITIF
+    assert classify("IN WITNESS WHEREOF, the parties have signed") == ROLE_SIGNATURE
+    assert classify("DONE at Yaounde, this 5th day of March 2024") == ROLE_SIGNATURE
+    assert classify("JUDGMENT") == ROLE_TITRE
+    assert classify("DECISION") == ROLE_TITRE
+    assert classify("the order was served on the defendant") == ""

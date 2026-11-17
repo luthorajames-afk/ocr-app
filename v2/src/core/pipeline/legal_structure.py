@@ -35,7 +35,7 @@ _DIGIT_WORD = r"(?:\d+|PREMIER|premier|1er|UN|un|ONE|one|TWO|two)"
 
 _ARTICLE_RE = re.compile(
     r"^\s*(?:ARTICLE|Article|ARTICLES|Art\.?)[\s_.·-]*(?:N°|n°|Nº|No\.?)?\s*"
-    r"(?:1er|1ᵉʳ|PREMIER|premier|\d+|première|Première)",
+    r"(?:1er|1ᵉʳ|PREMIER|premier|\d+|première|Première|[IVXLCCD]+\b)",
 )
 _ALINEA_RE = re.compile(r"^\s*(?:\d{1,2}\s*[°º]\s*/?|[a-hA-H]\s*\))\s*[-–—]?\s*")
 _TITRE_RE = re.compile(
@@ -51,12 +51,17 @@ _VISA_RE = re.compile(
     r"^\s*(?:VU|VUE|VUS|Vus|Vu|Voyant|Sur\s+proposition|SUR\s+PROPOSITION)\b"
 )
 _CONSIDERANT_RE = re.compile(
-    r"^\s*(?:CONSIDÉRANT|CONSIDERANT|Considérant|ATTENDU|Attendu|VU\s+QU'|Vu\s+qu')",
+    r"^\s*(?:CONSIDÉRANT|CONSIDERANT|Considérant|ATTENDU|Attendu|VU\s+QU'|Vu\s+qu'"
+    r"|WHEREAS|Whereas|RECITALS?|Recitals?)",
 )
 _DISPOSITIF_RE = re.compile(
     r"^\s*(?:A\s*R\s*R\s*Ê\s*T\s*E|A\s*R\s*R\s*E\s*T\s*E|ARRÊTE|ARRETE|Arrête|Arrête\b"
     r"|DÉCRÈTE|DECRETE|Décrète|DÉCIDE|DECIDE|Décide"
-    r"|PAR\s+CES\s+MOTIFS|Par\s+ces\s+motifs|EN\s+CONCLUSION|DISPOSE|Dispose)",
+    r"|PAR\s+CES\s+MOTIFS|Par\s+ces\s+motifs|EN\s+CONCLUSION|DISPOSE|Dispose"
+    r"|NOW\s*,?\s*THEREFORE|NOW\s+THEREFORE"
+    r"|IT\s+IS\s+HEREBY\s+(?:ORDERED|DECREED|ADJUDGED|RESOLVED)"
+    r"|HEREBY\s+(?:ORDERED|DECREED|ADJUDGED)|HAVE\s+AGREED|AGREE\s+AS\s+FOLLOWS"
+    r"|DO\s+HEREBY)",
 )
 _ANNEXE_RE = re.compile(r"^\s*(?:ANNEXE|Annexe|A\s*N\s*N\s*E\s*X\s*E)\b")
 _SIGNATURE_RE = re.compile(
@@ -64,15 +69,24 @@ _SIGNATURE_RE = re.compile(
     r"|LE\s+PREMIER\s+MINISTRE|LE\s+MINISTRE|LA\s+MINISTRE|LES\s+MINISTRES"
     r"|LE\s+GARDE\s+DES\s+SCEAUX|LE\s+PROCUREUR|LE\s+GREFFIER|LA\s+GREFFIÈRE"
     r"|Fait\s+à|FAIT\s+À|Fait\s+a\b|Pour\s+le\s+Président|Pour\s+le\s+Ministre"
-    r"|Ampliations| Le\s+Président)",
+    r"|Ampliations| Le\s+Président"
+    r"|IN\s+WITNESS\s+WHEREOF|DONE\s+at|SIGNED\s+at|For\s+the\s+Republic)",
     re.IGNORECASE,
 )
 # Ligne de fonction suivie d'un point final (« LE MINISTRE DE LA FONCTION PUBLIQUE, »).
 _META_RE = re.compile(
     r"^\s*(?:RÉPUBLIQUE|RÉPUBLIQUE|REPUBLIQUE|PRESIDENCE|PRIMATURE|PAIX|CONSTITUTION"
     r"|LOI\s+N|LOI/D|DÉCRET\s+N|DÉCRET\s*n|DECRET\s+N|ARRÊTÉ\s+N|ORDONNANCE\s*N"
-    r"|CIRCULAIRE\s+N|JOURNAL\s+OFFICIEL|MINISTÈRE|MINISTERE)\b",
+    r"|CIRCULAIRE\s+N|JOURNAL\s+OFFICIEL|MINISTÈRE|MINISTERE|IN\s+THE\s+MATTER\s+OF|REPUBLIC\s+OF\s+CAMEROON)\b",
     re.IGNORECASE,
+)
+
+
+# En-têtes anglais autonomes (JUDGMENT, DECISION, ORDER…) : ligne courte en
+# majuscules uniquement, pour ne pas classer un mot du corps de texte.
+_EN_HEADING_RE = re.compile(
+    r"^\s*(?:JUDGMENT|JUDGEMENT|DECISION|ORDER|RULING|OPINION|FINDINGS?|"
+    r"CONCLUSION|CONCLUSIONS|RECITALS?|AWARD|SENTENCE)\s*:?\s*$"
 )
 
 
@@ -89,7 +103,7 @@ def classify(text: str) -> str:
     upper = line.upper()
     if _ARTICLE_RE.match(line):
         return ROLE_ARTICLE
-    if _TITRE_RE.match(line):
+    if _TITRE_RE.match(line) or _EN_HEADING_RE.match(upper):
         return ROLE_TITRE
     if _ANNEXE_RE.match(line):
         return ROLE_ANNEXE
@@ -97,6 +111,13 @@ def classify(text: str) -> str:
         # Le dispositif est le mot seul (« ARRETE », « DÉCIDE ») : une ligne
         # avec numéro/référence (« ARRETE N°3277/… ») est un en-tête.
         rest = _DISPOSITIF_RE.sub("", upper).strip(" :;.,-–—")
+        english_phrases = (
+            "NOW, THEREFORE", "NOW THEREFORE", "IT IS HEREBY", "HEREBY ORDERED",
+            "HEREBY DECREED", "HEREBY ADJUDGED", "HAVE AGREED",
+            "AGREE AS FOLLOWS", "DO HEREBY", "PAR CES MOTIFS", "EN CONCLUSION",
+        )
+        if any(upper.startswith(phrase) for phrase in english_phrases):
+            return ROLE_DISPOSITIF
         if "N°" not in rest and "NO." not in rest and len(rest) <= 12:
             return ROLE_DISPOSITIF
         return ROLE_META
