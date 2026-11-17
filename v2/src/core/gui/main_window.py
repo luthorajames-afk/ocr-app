@@ -11,7 +11,15 @@ from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, QPointF, QSettings, Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QColor, QKeyEvent, QMouseEvent, QPen, QPixmap
+from PySide6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QKeyEvent,
+    QMouseEvent,
+    QPen,
+    QPixmap,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -168,13 +176,27 @@ class TaskSidebar(QWidget):
 
 
 class PreviewView(QGraphicsView):
-    """Vue de l'aperçu : double-clic converti en coordonnées de scène."""
+    """Vue de l'aperçu : double-clic et zoom à la molette sous le curseur."""
 
     double_clicked = Signal(QPointF)
+    zoomed = Signal()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         self.double_clicked.emit(self.mapToScene(event.position().toPoint()))
         super().mouseDoubleClickEvent(event)
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        delta = event.angleDelta().y()
+        if delta == 0:
+            super().wheelEvent(event)
+            return
+        anchor = self.transformationAnchor()
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        factor = 1.15 if delta > 0 else 1 / 1.15
+        self.scale(factor, factor)
+        self.setTransformationAnchor(anchor)
+        self.zoomed.emit()
+        event.accept()
 
 
 class PreviewPanel(QWidget):
@@ -190,6 +212,7 @@ class PreviewPanel(QWidget):
         self.view.setObjectName("Preview")
         self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.view.double_clicked.connect(self._on_preview_double_click)
+        self.view.zoomed.connect(self._on_wheel_zoom)
         self.title = QLabel("Aucun document")
         self.title.setObjectName("Title")
         self.info = QLabel("")
@@ -241,6 +264,7 @@ class PreviewPanel(QWidget):
         self._page = 1
         self._total = 1
         self._dpi = 300
+        self._user_zoomed = False
         self._task: Task | None = None
         self._flash_item: QGraphicsRectItem | None = None
         self._blocks: list[dict[str, object]] = []
@@ -297,6 +321,9 @@ class PreviewPanel(QWidget):
 
     def show_page(self, task: Task, page_number: int) -> None:
         self._close_inline_editor()
+        previous_page = self._page
+        scroll_h = self.view.horizontalScrollBar().value()
+        scroll_v = self.view.verticalScrollBar().value()
         self.scene.clear()
         self._flash_item = None
         self._overlay_items = []
@@ -312,7 +339,6 @@ class PreviewPanel(QWidget):
             if not pixmap.isNull():
                 self.scene.addPixmap(pixmap)
                 self.scene.setSceneRect(self.scene.itemsBoundingRect())
-                self.fit_page()
         else:
             data = Path(task.work_dir) / f"page_{page_number:03d}.json"
             text = ""
@@ -323,6 +349,15 @@ class PreviewPanel(QWidget):
                     text = ""
             self.scene.addRect(0, 0, 430, 608, brush=Qt.GlobalColor.white)
             self.scene.addText((text or "[page en cours]")[:1500])
+        # Zoom persistant : on ne réajuste que si l'utilisateur n'a pas zoomé.
+        if self._user_zoomed:
+            self.view.horizontalScrollBar().setValue(
+                scroll_h if previous_page == page_number else 0
+            )
+            self.view.verticalScrollBar().setValue(
+                scroll_v if previous_page == page_number else 0
+            )
+        else:
             self.fit_page()
         self._task = task
         self.title.setText(Path(task.source_path).name)
@@ -548,16 +583,23 @@ class PreviewPanel(QWidget):
         return super().eventFilter(watched, event)
 
     # --------------------------------------------------------------- zoom
+    def _on_wheel_zoom(self) -> None:
+        self._user_zoomed = True
+        self.info.setText("zoom molette · Ajuster pour recadrer")
+
     def zoom_in(self) -> None:
         self.view.scale(1.2, 1.2)
+        self._user_zoomed = True
 
     def zoom_out(self) -> None:
         self.view.scale(1 / 1.2, 1 / 1.2)
+        self._user_zoomed = True
 
     def fit_page(self) -> None:
         if not self.scene.items():
             return
         self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self._user_zoomed = False
 
     # ---------------------------------------------------- comparaison détachée
     def detach_comparison(self) -> None:

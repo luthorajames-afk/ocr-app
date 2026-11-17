@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QPixmap
 
 from core.gui.main_window import PreviewPanel
@@ -77,3 +77,45 @@ def test_second_block_hit_test_and_escape(qtbot, tmp_path) -> None:
     assert panel._inline_index == 1
     panel._close_inline_editor()
     assert panel._inline_editor is None
+
+
+def test_zoom_persists_across_page_refresh(qtbot, tmp_path) -> None:
+    work = make_work(tmp_path)
+    panel = PreviewPanel()
+    qtbot.addWidget(panel)
+    panel.resize(900, 700)
+    panel.show()
+    panel.show_page(task_for(work), 1)
+    panel.zoom_in()
+    zoomed = panel.view.transform().m11()
+    panel.show_page(task_for(work), 1)  # rafraîchissement après correction
+    assert abs(panel.view.transform().m11() - zoomed) < 1e-6
+    assert panel._user_zoomed is True
+    panel.fit_page()
+    assert panel._user_zoomed is False
+
+
+def test_mouse_wheel_zooms_under_cursor(qtbot, tmp_path) -> None:
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QApplication
+
+    work = make_work(tmp_path)
+    panel = PreviewPanel()
+    qtbot.addWidget(panel)
+    panel.resize(900, 700)
+    panel.show()
+    panel.show_page(task_for(work), 1)
+    before = panel.view.transform().m11()
+    event = QWheelEvent(
+        QPointF(300.0, 300.0),
+        QPointF(300.0, 300.0),
+        QPoint(0, 0),
+        QPoint(0, 120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QApplication.sendEvent(panel.view.viewport(), event)
+    assert panel.view.transform().m11() > before
+    assert panel._user_zoomed is True
