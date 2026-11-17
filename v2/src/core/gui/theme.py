@@ -105,6 +105,19 @@ QTextBrowser, QPlainTextEdit {{
     background: {p['PANEL']}; border: 1px solid {p['BORDER']}; border-radius: 7px;
     color: {p['TEXT']};
 }}
+QTableWidget {{
+    background: {p['PANEL']}; color: {p['TEXT']};
+    gridline-color: {p['BORDER']}; border: 1px solid {p['BORDER']};
+    border-radius: 6px; selection-background-color: {p['ACCENT_SOFT']};
+    selection-color: {p['TEXT']};
+}}
+QTableWidget::item {{ color: {p['TEXT']}; padding: 3px 6px; }}
+QTableWidget::item:selected {{ background: {p['ACCENT_SOFT']}; color: {p['TEXT']}; }}
+QHeaderView::section {{
+    background: {p['PANEL_2']}; color: {p['TEXT']}; border: 0;
+    border-bottom: 1px solid {p['BORDER']}; padding: 4px 6px; font-weight: 600;
+}}
+QTableCornerButton::section {{ background: {p['PANEL_2']}; border: 0; }}
 QGraphicsView {{ background: {p['PANEL_2']}; border: 0; }}
 QWidget#TaskCard {{ background: transparent; }}
 QListWidget#TaskList {{ background: {p['WINDOW']}; border: 0; }}

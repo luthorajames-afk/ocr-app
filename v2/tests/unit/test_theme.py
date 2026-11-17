@@ -48,3 +48,19 @@ def test_settings_dialog_exposes_values_and_previews_theme(qtbot) -> None:
     assert theme.is_dark() is True
     dialog.close()
     theme.apply_theme(app, dark=False)
+
+
+def test_dark_stylesheet_styles_tables_and_headers(qtbot) -> None:
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    from core.gui import theme
+
+    app = QApplication.instance() or QApplication([])
+    theme.apply_theme(app, dark=True)
+    stylesheet = app.styleSheet()
+    assert "QTableWidget {" in stylesheet
+    assert "QTableWidget::item" in stylesheet
+    assert "QHeaderView::section" in stylesheet
+    assert theme.TEXT in stylesheet
+    theme.apply_theme(app, dark=False)

@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -22,6 +23,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from core.gui import theme
 
 LOW_CONFIDENCE = 0.60
 
@@ -120,7 +123,7 @@ class BlockEditor(QWidget):
             confidence = self._confidence(block)
             confidence_item = QTableWidgetItem(f"{confidence:.0%}")
             if confidence < LOW_CONFIDENCE:
-                confidence_item.setForeground(Qt.GlobalColor.red)
+                confidence_item.setForeground(QColor(theme.RED))
             confidence_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
             self.table.setItem(row, 0, confidence_item)
             kind_item = QTableWidgetItem(str(block.get("kind", "line")))
