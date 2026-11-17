@@ -40,9 +40,17 @@ class SearchService:
         index_dir: str | Path | None = None,
         work_root: str | Path | None = None,
         embedder: Embedder | None = None,
+        backend: str | None = None,
     ) -> None:
+        """``backend`` : numpy (défaut, sans code natif) ou chroma.
+
+        Chroma est explicitement opt-in via ``backend="chroma"`` ou la
+        variable ``AOCRI_INDEX_BACKEND`` : son client natif ne doit jamais
+        s'initialiser implicitement au démarrage de l'application.
+        """
         self._index_dir = Path(index_dir) if index_dir else default_index_dir()
-        self.index = self._build_index()
+        self._backend = backend or os.environ.get("AOCRI_INDEX_BACKEND", "numpy")
+        self.index: CorpusIndex | None = None
         self.work_root = Path(work_root) if work_root else default_work_root()
         self._embedder = embedder
         self._model_error: str | None = None
@@ -52,9 +60,9 @@ class SearchService:
 
     # ------------------------------------------------------------------ base
     def _build_index(self) -> CorpusIndex:
-        """Construit l'index ; un échec ( Chroma natif) retombe sur numpy."""
+        """Construit l'index ; un échec de Chroma retombe sur numpy."""
         try:
-            return CorpusIndex(self._index_dir)
+            return CorpusIndex(self._index_dir, backend=self._backend)
         except Exception as exc:  # noqa: BLE001 — remonté via model_error
             self._index_init_error = str(exc)
             return CorpusIndex(self._index_dir, backend="numpy")
@@ -110,7 +118,7 @@ class SearchService:
         self._model_error = None
         try:
             return index_work_dirs(
-                self.work_dirs(), self.embedder, self.index, replace=replace
+                self.work_dirs(), self.embedder, self.ensure_index(), replace=replace
             )
         except Exception as exc:
             self._model_error = str(exc)
