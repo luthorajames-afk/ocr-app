@@ -28,6 +28,8 @@ _AMBIGUOUS: dict[str, tuple[str, ...]] = {
     "5": ("s", "S"),
     "3": ("e", "é"),
     "8": ("B",),
+    # « ô » est fréquemment reconnu « 6 » par l'OCR (c6té, h6tel, bient6t).
+    "6": ("b", "ô", "o", "é", "è", "e"),
 }
 
 # Mot contenant chiffres ET lettres : signature typique de la frappe.
@@ -38,9 +40,9 @@ _RN = re.compile(r"rn")
 
 def _is_mixed_word(token: str) -> bool:
     """Vrai si le mot mêle lettres et chiffres (au moins 3 lettres)."""
-    if len(token) < 4 or not any(char.isdigit() for char in token):
+    if len(token) < 3 or not any(char.isdigit() for char in token):
         return False
-    return len(re.findall(r"[A-Za-zÀ-ÿ]", token)) >= 3
+    return len(re.findall(r"[A-Za-zÀ-ÿ]", token)) >= 2
 
 # Références jamais corrigées : numéros purs, n°, dates, codes.
 _PROTECTED = re.compile(r"^(?:\d+|n°?\d*|\d+[/.,-]\d+)$")
@@ -139,18 +141,24 @@ def fix_typewriter(
         token = match.group(0)
         if not _is_mixed_word(token) or _PROTECTED.match(token):
             return token
-        for candidate in _variants(token):
+        variants = _variants(token)
+        # 1) correspondance exacte (accents compris) sur TOUTES les variantes,
+        #    pour ne pas laisser « coté » (sans accent) gagner contre « côté ».
+        for candidate in variants:
             lowered = candidate.lower()
             if lowered in exact:
-                fixed = exact[lowered]
-            elif _strip_accents(lowered) in accent_free:
-                fixed = accent_free[_strip_accents(lowered)]
-            else:
-                continue
-            result = _match_case(token, fixed)
-            if result != token:
-                corrections.append((token, result))
-                return result
+                result = _match_case(token, exact[lowered])
+                if result != token:
+                    corrections.append((token, result))
+                    return result
+        # 2) repli sans accents (é/ê/è indiscernables à l'OCR).
+        for candidate in variants:
+            key = _strip_accents(candidate)
+            if key in accent_free:
+                result = _match_case(token, accent_free[key])
+                if result != token:
+                    corrections.append((token, result))
+                    return result
         return token
 
     return _WORD.sub(replace_token, text), corrections
